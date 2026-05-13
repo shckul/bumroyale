@@ -109,7 +109,7 @@
 
     <div id="screen-menu" class="screen active">
         <h2 id="display-name">Загрузка...</h2>
-        <div style="font-size: 20px; margin-bottom: 20px;">🏆 <span id="player-cups">1200</span></div>
+        <div style="font-size: 20px; margin-bottom: 20px;">🏆 <span id="player-cups">0</span></div>
         <button class="btn-battle" onclick="matchmake()">В БОЙ</button>
     </div>
 
@@ -120,8 +120,8 @@
 
     <div id="game-container">
         <div id="game-info">
-            <div class="info-box" id="enemy-stat">Враг: 1200 🏆</div>
-            <div class="info-box" id="player-stat">Вы: 1200 🏆</div>
+            <div class="info-box" id="enemy-stat">Враг: 0 🏆</div>
+            <div class="info-box" id="player-stat">Вы: 0 🏆</div>
         </div>
         <div id="timer">02:00</div>
         <canvas id="gameCanvas"></canvas>
@@ -148,6 +148,14 @@ let currentRoom = null;
 socket.on('start_game', (data) => {
     currentRoom = data.room;
     document.getElementById('loading-screen').style.display = 'none';
+    
+    // Получаем реальные ник и кубки врага
+    const enemyId = Object.keys(data.players).find(id => id !== socket.id);
+    const enemyData = data.players[enemyId];
+    
+    document.getElementById('enemy-stat').innerText = `${enemyData.nickname}: ${enemyData.trophies} 🏆`;
+    document.getElementById('player-stat').innerText = `${playerNickname}: ${trophies} 🏆`;
+    
     startBattle();
 });
 
@@ -172,7 +180,7 @@ const UNITS_DATA = [
 
 let myDeck = [0, 1, 2, 3, 4];
 let playerNickname = localStorage.getItem('nickname') || "Игрок";
-let trophies = parseInt(localStorage.getItem('trophies')) || 1200;
+let trophies = parseInt(localStorage.getItem('trophies')) || 0; // СТАРТ С 0 КУБКОВ
 let elixir = 0; 
 let enemyElixir = 0; 
 let selectedHandIndex = -1;
@@ -180,6 +188,7 @@ let isGaming = false;
 let gameTime = 120;
 let isOvertime = false;
 let elixirMultiplier = 0.5; 
+let lastUpdate = Date.now(); // Для синхронизации
 
 /** --- ИНТЕРФЕЙС --- **/
 function showScreen(screenId) {
@@ -228,8 +237,8 @@ function updateDeckCards() {
 function matchmake() {
     const ls = document.getElementById('loading-screen');
     ls.style.display = 'flex';
-    // Отправляем сигнал поиска на сервер
-    socket.emit('find_match');
+    // Отправляем ник и кубки серверу при поиске
+    socket.emit('find_match', { nickname: playerNickname, trophies: trophies });
 }
 
 /** --- ИГРОВОЙ ДВИЖОК --- **/
@@ -246,10 +255,10 @@ function startBattle() {
     elixir = 0; 
     enemyElixir = 0;
     elixirMultiplier = 0.5; 
+    lastUpdate = Date.now();
     document.getElementById('main-nav').style.display = 'none';
     document.getElementById('screen-menu').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
-    document.getElementById('player-stat').innerText = `${playerNickname}: ${trophies}`;
     
     resize();
     initGame();
@@ -311,7 +320,11 @@ function spawnUnit(unitId, x, y, isPlayer) {
 }
 
 function update() {
-    const inc = 0.0075 * elixirMultiplier;
+    const now = Date.now();
+    const dt = (now - lastUpdate) / 1000;
+    lastUpdate = now;
+
+    const inc = 0.5 * elixirMultiplier * dt;
     if (elixir < 10) elixir += inc;
 
     document.getElementById('elixir-fill').style.width = (elixir * 10) + "%";
@@ -345,8 +358,9 @@ function update() {
                     }
                 }
                 const angle = Math.atan2(destY - ent.y, destX - ent.x);
-                ent.x += Math.cos(angle) * ent.speed;
-                ent.y += Math.sin(angle) * ent.speed;
+                // СИНХРОНИЗИРОВАННОЕ ДВИЖЕНИЕ
+                ent.x += Math.cos(angle) * ent.speed * 100 * dt;
+                ent.y += Math.sin(angle) * ent.speed * 100 * dt;
             }
         }
         if (ent.reload > 0) ent.reload--;
@@ -372,6 +386,7 @@ function endGame(result) {
     const win = result > 0;
     const change = win ? 30 : (result === 0 ? 0 : -25);
     trophies += change;
+    if(trophies < 0) trophies = 0;
     localStorage.setItem('trophies', trophies);
 
     document.getElementById('res-status').innerText = win ? "ПОБЕДА!" : (result === 0 ? "НИЧЬЯ" : "ПОРАЖЕНИЕ");

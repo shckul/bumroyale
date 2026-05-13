@@ -3,347 +3,371 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bum Royale Mobile</title>
+    <title>Bum Royale Pro</title>
     <style>
-        :root { --blue: #3498db; --red: #e74c3c; --dark: #2c3e50; --gold: #f1c40f; }
-        body { margin: 0; font-family: sans-serif; background: var(--dark); color: white; overflow: hidden; touch-action: manipulation; }
+        :root { --blue: #3498db; --red: #e74c3c; --dark: #1a1a1a; --gold: #f1c40f; --grass: #27ae60; }
+        body { margin: 0; font-family: 'Arial', sans-serif; background: var(--dark); color: white; overflow: hidden; touch-action: none; }
         
-        /* Меню и вкладки */
-        #ui-layer { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; z-index: 100; }
-        .screen { display: none; flex: 1; padding: 15px; text-align: center; overflow-y: auto; }
-        .screen.active { display: block; }
+        /* UI Меню */
+        #ui-layer { position: absolute; inset: 0; display: flex; flex-direction: column; z-index: 100; background: var(--dark); }
+        .screen { display: none; flex: 1; padding: 20px; text-align: center; }
+        .screen.active { display: flex; flex-direction: column; align-items: center; }
         
-        .tabs { display: flex; background: #1a252f; height: 70px; border-top: 2px solid #34495e; }
-        .tab { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; opacity: 0.6; }
-        .tab.active { opacity: 1; border-top: 4px solid var(--blue); background: #2c3e50; }
+        .tabs { display: flex; background: #000; height: 70px; border-top: 2px solid #333; }
+        .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; color: #888; }
+        .tab.active { color: var(--blue); border-top: 3px solid var(--blue); background: #111; }
 
-        /* Колода */
-        .deck-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
-        .card { background: #ecf0f1; color: #2c3e50; padding: 10px; border-radius: 8px; position: relative; border: 3px solid transparent; font-size: 12px; font-weight: bold; }
-        .card.selected { border-color: #27ae60; background: #d5f5e3; }
-        .card .cost { position: absolute; top: -5px; left: -5px; background: #9b59b6; color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+        .unit-card { background: #fff; color: #000; padding: 10px; border-radius: 8px; border: 3px solid transparent; font-weight: bold; width: 80px; position: relative; }
+        .unit-card.selected { border-color: var(--grass); background: #e0ffe0; }
+        .unit-card .cost-badge { position: absolute; top: -8px; left: -8px; background: #9b59b6; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 
-        /* Бой HUD */
-        #game-container { position: relative; width: 100vw; height: 100vh; background: #27ae60; display: none; }
-        canvas { display: block; background: #2ecc71; margin: 0 auto; }
+        /* Игровой экран */
+        #game-container { position: relative; width: 100vw; height: 100vh; display: none; background: var(--grass); }
+        canvas { display: block; touch-action: none; }
         
-        .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        .opp-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 15px; font-size: 14px; }
-        .timer { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 2px 2px #000; }
+        /* HUD */
+        .hud-top { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-between; padding: 0 15px; box-sizing: border-box; pointer-events: none; }
+        .timer { font-size: 24px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 2px 15px; border-radius: 10px; }
         
-        /* Эликсир и Карты в бою */
-        .battle-bottom { position: absolute; bottom: 0; width: 100%; height: 120px; background: rgba(0,0,0,0.3); pointer-events: auto; }
-        .elixir-container { width: 90%; height: 12px; background: #34495e; margin: 5px auto; border-radius: 6px; overflow: hidden; position: relative; }
-        .elixir-fill { height: 100%; background: #9b59b6; width: 0%; transition: width 0.3s; }
-        .elixir-num { position: absolute; width: 100%; text-align: center; top: -2px; font-size: 12px; font-weight: bold; color: #f0f; }
+        .battle-ui { position: absolute; bottom: 0; width: 100%; height: 140px; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; }
+        .elixir-wrapper { width: 90%; height: 20px; background: #333; border-radius: 10px; margin-top: 8px; position: relative; border: 2px solid #555; }
+        .elixir-bar { height: 100%; background: linear-gradient(90deg, #8e44ad, #9b59b6); width: 0%; transition: width 0.3s; }
+        .elixir-val { position: absolute; width: 100%; text-align: center; font-weight: bold; top: 0; line-height: 20px; text-shadow: 1px 1px #000; }
 
-        .hand { display: flex; justify-content: center; gap: 8px; margin-top: 5px; }
-        .hand-card { width: 60px; height: 80px; background: white; color: black; border-radius: 5px; position: relative; border: 2px solid #333; font-size: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; }
-        .hand-card.active { border-color: var(--gold); transform: translateY(-10px); }
-        .next-card { width: 40px; height: 55px; opacity: 0.8; margin-left: 10px; background: #bdc3c7; }
+        .hand-container { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+        .hand-slot { width: 65px; height: 85px; background: white; border-radius: 5px; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 3px solid #444; }
+        .hand-slot.selected { border-color: var(--gold); transform: translateY(-10px); }
+        .queue-slot { width: 45px; height: 60px; background: #888; border-radius: 5px; opacity: 0.7; border: 2px solid #444; font-size: 9px; margin-left: 5px; color: white; display: flex; align-items: center; justify-content: center; text-align: center; }
 
-        /* Эмодзи */
-        .emoji-btn { position: absolute; bottom: 130px; right: 15px; font-size: 30px; pointer-events: auto; }
-        .emoji-panel { position: absolute; bottom: 170px; right: 15px; background: rgba(0,0,0,0.8); display: none; padding: 10px; border-radius: 10px; pointer-events: auto; }
-        .emoji-panel span { font-size: 25px; margin: 0 5px; cursor: pointer; }
-
-        #result-screen { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200; flex-direction: column; align-items: center; justify-content: center; }
+        .emoji-btn { position: absolute; bottom: 150px; right: 20px; background: rgba(0,0,0,0.6); width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #fff; }
+        .emoji-btn.disabled { opacity: 0.4; pointer-events: none; }
+        .emoji-grid { position: absolute; bottom: 210px; right: 20px; display: none; background: rgba(0,0,0,0.9); padding: 10px; border-radius: 15px; border: 1px solid #555; }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <div id="deck" class="screen">
-        <h3>КОЛОДА (выбери 5)</h3>
-        <div id="deck-list" class="deck-grid"></div>
+    <div id="deck-screen" class="screen">
+        <h2>КОЛОДА (5 из 10)</h2>
+        <div id="deck-list" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;"></div>
     </div>
 
-    <div id="main" class="screen active">
-        <h1 style="color: var(--gold); margin-top: 50px;">🏆 <span id="user-trophies">0</span></h1>
-        <p id="user-name-display">Игрок</p>
-        <button id="battle-btn" onclick="startMatch()" style="width: 200px; height: 60px; background: var(--red); color: white; border: none; border-radius: 30px; font-size: 20px; font-weight: bold; margin-top: 20px; box-shadow: 0 5px #c0392b;">В БОЙ</button>
-        <p id="status-text" style="margin-top: 20px; color: var(--blue);"></p>
+    <div id="main-screen" class="screen active">
+        <div style="font-size: 40px; margin-top: 40px;">🏆 <span id="trophy-val">0</span></div>
+        <div id="nick-display" style="font-weight: bold; margin-bottom: 30px;">Игрок</div>
+        <button onclick="startMatch()" style="background: var(--red); color: white; padding: 20px 60px; font-size: 24px; border: none; border-radius: 50px; box-shadow: 0 6px #a93226; font-weight: bold;">В БОЙ</button>
+        <p id="match-status" style="margin-top: 20px; color: var(--blue);"></p>
     </div>
 
-    <div id="profile" class="screen">
-        <h3>ПРОФИЛЬ</h3>
-        <input type="text" id="nick-input" placeholder="Никнейм" style="padding: 10px; border-radius: 5px; width: 80%;">
+    <div id="profile-screen" class="screen">
+        <h2>ПРОФИЛЬ</h2>
+        <input type="text" id="nick-input" style="padding: 10px; width: 200px; border-radius: 5px;">
         <button onclick="saveProfile()" style="margin-top: 10px; padding: 10px 20px;">Сохранить</button>
     </div>
 
     <div class="tabs">
-        <div class="tab" onclick="switchTab('deck')">🃏 Колода</div>
-        <div class="tab active" onclick="switchTab('main')">⚔️ Бой</div>
-        <div class="tab" onclick="switchTab('profile')">👤 Профиль</div>
+        <div class="tab" onclick="showTab('deck-screen')">🎴 Карты</div>
+        <div class="tab active" onclick="showTab('main-screen')">⚔️ Бой</div>
+        <div class="tab" onclick="showTab('profile-screen')">👤 Игрок</div>
     </div>
 </div>
 
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
-    <div class="hud">
-        <div class="opp-info"><span id="opp-nick">...</span> | 🏆 <span id="opp-t">0</span></div>
-        <div class="timer" id="game-timer">02:00</div>
-        
-        <div class="emoji-btn" onclick="toggleEmoji()">💬</div>
-        <div class="emoji-panel" id="emoji-panel">
-            <span onclick="sendEmoji('👍')">👍</span>
-            <span onclick="sendEmoji('👎')">👎</span>
-            <span onclick="sendEmoji('❤️')">❤️</span>
-            <span onclick="sendEmoji('😭')">😭</span>
-            <span onclick="sendEmoji('🤣')">🤣</span>
-        </div>
+    
+    <div class="hud-top">
+        <div id="opp-label" style="background: rgba(231, 76, 60, 0.7); padding: 5px 15px; border-radius: 20px;">Оппонент 🏆 0</div>
+        <div class="timer" id="timer-label">02:00</div>
+    </div>
 
-        <div class="battle-bottom">
-            <div class="elixir-num">💧 <span id="elixir-val">0</span> / 10</div>
-            <div class="elixir-container">
-                <div class="elixir-fill" id="elixir-bar"></div>
-            </div>
-            <div class="hand">
-                <div id="hand-cards" style="display: flex; gap: 5px;"></div>
-                <div id="next-card-view" class="hand-card next-card"></div>
-            </div>
+    <div class="emoji-btn" id="emoji-trigger" onclick="toggleEmojiGrid()">💬</div>
+    <div class="emoji-grid" id="emoji-grid">
+        <span onclick="sendEmoji('👍')">👍</span>
+        <span onclick="sendEmoji('👎')">👎</span>
+        <span onclick="sendEmoji('❤️')">❤️</span>
+        <span onclick="sendEmoji('😭')">😭</span>
+        <span onclick="sendEmoji('🤣')">🤣</span>
+    </div>
+
+    <div class="battle-ui">
+        <div class="elixir-wrapper">
+            <div class="elixir-bar" id="elixir-fill"></div>
+            <div class="elixir-val"><span id="elixir-num">0</span> / 10</div>
+        </div>
+        <div class="hand-container">
+            <div id="battle-hand" style="display: flex; gap: 8px;"></div>
+            <div class="queue-slot" id="queue-view"></div>
         </div>
     </div>
 </div>
 
-<div id="result-screen">
-    <h1 id="res-title">ПОБЕДА</h1>
-    <h2 id="res-diff" style="color: var(--gold);">+30</h2>
-    <button onclick="location.reload()" style="padding: 15px 40px; border-radius: 10px; border: none; background: white; font-weight: bold;">В МЕНЮ</button>
-</div>
-
 <script>
-    const UNITS = [
-        {id:0, name:"Рыцарь", cost:3, color:'#3498db'}, {id:1, name:"Лучник", cost:2, color:'#e67e22'},
-        {id:2, name:"Гигант", cost:5, color:'#d35400'}, {id:3, name:"Скелет", cost:1, color:'#bdc3c7'},
-        {id:4, name:"Мушкетер", cost:4, color:'#9b59b6'}, {id:5, name:"М.Пекка", cost:4, color:'#2980b9'},
-        {id:6, name:"Принц", cost:5, color:'#f1c40f'}, {id:7, name:"Дракон", cost:4, color:'#2ecc71'},
-        {id:8, name:"Валкирия", cost:4, color:'#e74c3c'}, {id:9, name:"Маг", cost:5, color:'#34495e'}
-    ];
+// --- КОНФИГУРАЦИЯ ---
+const UNIT_TYPES = [
+    {id: 0, name: "Рыцарь", cost: 3, color: '#3498db'}, {id: 1, name: "Лучник", cost: 2, color: '#e67e22'},
+    {id: 2, name: "Гигант", cost: 5, color: '#d35400'}, {id: 3, name: "Скелет", cost: 1, color: '#ecf0f1'},
+    {id: 4, name: "Мушкетер", cost: 4, color: '#9b59b6'}, {id: 5, name: "Пекка", cost: 4, color: '#2980b9'},
+    {id: 6, name: "Принц", cost: 5, color: '#f1c40f'}, {id: 7, name: "Дракон", cost: 4, color: '#2ecc71'},
+    {id: 8, name: "Валкирия", cost: 4, color: '#e74c3c'}, {id: 9, name: "Маг", cost: 5, color: '#34495e'}
+];
 
-    let myData = {
-        name: localStorage.getItem('bn_name') || "Игрок",
-        trophies: parseInt(localStorage.getItem('bn_trophies')) || 0,
-        deck: JSON.parse(localStorage.getItem('bn_deck')) || [0, 1, 2, 3, 4]
-    };
+let state = {
+    name: localStorage.getItem('p_name') || "Игрок",
+    trophies: parseInt(localStorage.getItem('p_trophies')) || 0,
+    deck: JSON.parse(localStorage.getItem('p_deck')) || [0, 1, 2, 3, 4],
+    socket: null,
+    inBattle: false,
+    elixir: 0,
+    hand: [],
+    queue: [],
+    selectedIdx: -1,
+    emojiCooldown: false,
+    emojis: []
+};
 
-    let battleData = {
-        hand: [], queue: [], selectedIdx: -1, elixir: 5, active: false, role: 'p1', emojis: []
-    };
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-    let socket;
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+function init() {
+    document.getElementById('trophy-val').innerText = state.trophies;
+    document.getElementById('nick-display').innerText = state.name;
+    document.getElementById('nick-input').value = state.name;
+    renderDeckMenu();
+    resize();
+    window.onresize = resize;
+}
 
-    // --- Инициализация ---
-    function init() {
-        document.getElementById('user-trophies').innerText = myData.trophies;
-        document.getElementById('user-name-display').innerText = myData.name;
-        document.getElementById('nick-input').value = myData.name;
-        renderDeck();
-        resize();
-        window.onresize = resize;
-    }
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
 
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
+function showTab(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
 
-    function switchTab(id) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        event.currentTarget.classList.add('active');
-    }
+function saveProfile() {
+    state.name = document.getElementById('nick-input').value;
+    localStorage.setItem('p_name', state.name);
+    location.reload();
+}
 
-    function saveProfile() {
-        myData.name = document.getElementById('nick-input').value;
-        localStorage.setItem('bn_name', myData.name);
-        alert("Сохранено!");
-        location.reload();
-    }
-
-    function renderDeck() {
-        const list = document.getElementById('deck-list');
-        list.innerHTML = '';
-        UNITS.forEach(u => {
-            const isSel = myData.deck.includes(u.id);
-            const d = document.createElement('div');
-            d.className = `card ${isSel ? 'selected' : ''}`;
-            d.innerHTML = `<div class="cost">${u.cost}</div>${u.name}`;
-            d.onclick = () => {
-                if(isSel) myData.deck = myData.deck.filter(i => i !== u.id);
-                else if(myData.deck.length < 5) myData.deck.push(u.id);
-                localStorage.setItem('bn_deck', JSON.stringify(myData.deck));
-                renderDeck();
-            };
-            list.appendChild(d);
-        });
-    }
-
-    // --- Логика Боя ---
-    function startMatch() {
-        if(myData.deck.length < 5) return alert("Выбери 5 карт!");
-        document.getElementById('status-text').innerText = "Поиск противника...";
-        
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        socket = new WebSocket(`${protocol}//${location.host}`);
-
-        socket.onopen = () => {
-            socket.send(JSON.stringify({ type: 'join', name: myData.name, trophies: myData.trophies, deck: myData.deck }));
+function renderDeckMenu() {
+    const list = document.getElementById('deck-list');
+    list.innerHTML = '';
+    UNIT_TYPES.forEach(u => {
+        const sel = state.deck.includes(u.id);
+        const card = document.createElement('div');
+        card.className = `unit-card ${sel ? 'selected' : ''}`;
+        card.innerHTML = `<div class="cost-badge">${u.cost}</div>${u.name}`;
+        card.onclick = () => {
+            if(sel) state.deck = state.deck.filter(i => i !== u.id);
+            else if(state.deck.length < 5) state.deck.push(u.id);
+            localStorage.setItem('p_deck', JSON.stringify(state.deck));
+            renderDeckMenu();
         };
-
-        socket.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if(data.type === 'match_start') {
-                battleData.role = data.role;
-                document.getElementById('opp-nick').innerText = data.oppName;
-                document.getElementById('opp-t').innerText = data.oppTrophies;
-                setupBattle();
-            }
-            if(data.type === 'sync') {
-                drawGame(data);
-                battleData.elixir = Math.min(10, battleData.elixir + (data.suddenDeath ? 0.02 : 0.01));
-                updateHUD(data.timer);
-            }
-            if(data.type === 'emoji') {
-                showEmoji(data.emoji, data.isOpponent);
-            }
-            if(data.type === 'game_over') {
-                showResults(data.winner === battleData.role);
-            }
-        };
-    }
-
-    function setupBattle() {
-        document.getElementById('ui-layer').style.display = 'none';
-        document.getElementById('game-container').style.display = 'block';
-        battleData.active = true;
-        battleData.hand = myData.deck.slice(0, 4);
-        battleData.queue = [myData.deck[4]];
-        renderHand();
-    }
-
-    function renderHand() {
-        const handCont = document.getElementById('hand-cards');
-        handCont.innerHTML = '';
-        battleData.hand.forEach((id, idx) => {
-            const u = UNITS.find(un => un.id === id);
-            const d = document.createElement('div');
-            d.className = `hand-card ${battleData.selectedIdx === idx ? 'active' : ''}`;
-            d.innerHTML = `<b>${u.cost}💧</b><br>${u.name}`;
-            d.onclick = (e) => {
-                e.stopPropagation();
-                battleData.selectedIdx = (battleData.selectedIdx === idx ? -1 : idx);
-                renderHand();
-            };
-            handCont.appendChild(d);
-        });
-
-        const nextU = UNITS.find(un => un.id === battleData.queue[0]);
-        document.getElementById('next-card-view').innerHTML = `След:<br>${nextU.name}`;
-    }
-
-    function updateHUD(timer) {
-        document.getElementById('elixir-val').innerText = Math.floor(battleData.elixir);
-        document.getElementById('elixir-bar').style.width = (battleData.elixir * 10) + '%';
-        const m = Math.floor(timer/60), s = timer%60;
-        document.getElementById('game-timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
-    }
-
-    canvas.addEventListener('click', (e) => {
-        if(!battleData.active || battleData.selectedIdx === -1) return;
-        const uId = battleData.hand[battleData.selectedIdx];
-        const cost = UNITS.find(un => un.id === uId).cost;
-
-        if(battleData.elixir >= cost) {
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / canvas.width;
-            const y = (e.clientY - rect.top) / canvas.height;
-
-            // Проверка зоны высадки
-            const isMyHalf = (battleData.role === 'p1' && y > 0.55) || (battleData.role === 'p2' && y < 0.45);
-            if(!isMyHalf) return;
-
-            socket.send(JSON.stringify({ type: 'place_unit', unitId: uId, x, y }));
-            
-            battleData.elixir -= cost;
-            const played = battleData.hand.splice(battleData.selectedIdx, 1)[0];
-            battleData.hand.push(battleData.queue.shift());
-            battleData.queue.push(played);
-            
-            battleData.selectedIdx = -1;
-            renderHand();
-        }
+        list.appendChild(card);
     });
+}
 
-    function drawGame(data) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Река
-        ctx.fillStyle = '#2980b9';
-        ctx.fillRect(0, canvas.height * 0.48, canvas.width, canvas.height * 0.04);
+// --- БОЕВАЯ ЛОГИКА ---
+function startMatch() {
+    if(state.deck.length < 5) return alert("Выбери 5 карт!");
+    document.getElementById('match-status').innerText = "Поиск оппонента...";
+    
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    state.socket = new WebSocket(`${protocol}//${location.host}`);
 
-        // Башни
-        data.towers.forEach(t => {
-            ctx.fillStyle = t.owner === battleData.role ? '#3498db' : '#e74c3c';
+    state.socket.onopen = () => {
+        state.socket.send(JSON.stringify({ type: 'join', name: state.name, trophies: state.trophies, deck: state.deck }));
+    };
+
+    state.socket.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if(msg.type === 'match_start') {
+            state.role = msg.role;
+            document.getElementById('opp-label').innerText = `${msg.oppName} 🏆 ${msg.oppTrophies}`;
+            launchBattle();
+        }
+        if(msg.type === 'sync') {
+            updateBattleState(msg);
+        }
+        if(msg.type === 'emoji') {
+            state.emojis.push({ t: msg.emoji, isOpp: msg.isOpponent, time: Date.now() });
+        }
+        if(msg.type === 'game_over') {
+            finishGame(msg.winner === state.role);
+        }
+    };
+}
+
+function launchBattle() {
+    document.getElementById('ui-layer').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    state.inBattle = true;
+    state.elixir = 0;
+    state.hand = state.deck.slice(0, 4);
+    state.queue = [state.deck[4]];
+    renderBattleHand();
+    requestAnimationFrame(renderLoop);
+}
+
+function renderBattleHand() {
+    const cont = document.getElementById('battle-hand');
+    cont.innerHTML = '';
+    state.hand.forEach((id, idx) => {
+        const u = UNIT_TYPES.find(x => x.id === id);
+        const slot = document.createElement('div');
+        slot.className = `hand-slot ${state.selectedIdx === idx ? 'selected' : ''}`;
+        slot.innerHTML = `💧 ${u.cost}<br>${u.name}`;
+        slot.onclick = (e) => {
+            e.stopPropagation();
+            state.selectedIdx = (state.selectedIdx === idx ? -1 : idx);
+            renderBattleHand();
+        };
+        cont.appendChild(slot);
+    });
+    const nextU = UNIT_TYPES.find(x => x.id === state.queue[0]);
+    document.getElementById('queue-view').innerText = `СЛЕД:\n${nextU.name}`;
+}
+
+canvas.addEventListener('touchstart', handlePlace);
+canvas.addEventListener('mousedown', handlePlace);
+
+function handlePlace(e) {
+    if(!state.inBattle || state.selectedIdx === -1) return;
+    
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const x = clientX / canvas.width;
+    const y = clientY / canvas.height;
+
+    // Ограничение зоны высадки (только своя половина, не река)
+    const inRiver = y > 0.46 && y < 0.54;
+    const myHalf = state.role === 'p1' ? y > 0.55 : y < 0.45;
+
+    if(myHalf && !inRiver) {
+        const unitId = state.hand[state.selectedIdx];
+        const cost = UNIT_TYPES.find(u => u.id === unitId).cost;
+
+        if(state.elixir >= cost) {
+            state.socket.send(JSON.stringify({ type: 'place_unit', unitId, x, y }));
+            state.elixir -= cost;
+            
+            // Ротация карт
+            const played = state.hand.splice(state.selectedIdx, 1)[0];
+            state.hand.push(state.queue.shift());
+            state.queue.push(played);
+            
+            state.selectedIdx = -1;
+            renderBattleHand();
+        }
+    }
+}
+
+function toggleEmojiGrid() {
+    const grid = document.getElementById('emoji-grid');
+    grid.style.display = grid.style.display === 'block' ? 'none' : 'block';
+}
+
+function sendEmoji(emoji) {
+    if(state.emojiCooldown) return;
+    state.socket.send(JSON.stringify({ type: 'emoji', emoji }));
+    toggleEmojiGrid();
+    
+    state.emojiCooldown = true;
+    const btn = document.getElementById('emoji-trigger');
+    btn.classList.add('disabled');
+    
+    setTimeout(() => {
+        state.emojiCooldown = false;
+        btn.classList.remove('disabled');
+    }, 3000);
+}
+
+function updateBattleState(data) {
+    state.lastSync = data;
+    // Эликсир копится на клиенте для плавности, но сверяется с сервером
+    if(state.elixir < 10) state.elixir += (data.suddenDeath ? 0.02 : 0.012);
+    
+    document.getElementById('elixir-num').innerText = Math.floor(state.elixir);
+    document.getElementById('elixir-fill').style.width = (state.elixir * 10) + '%';
+    
+    const m = Math.floor(data.timer/60), s = data.timer%60;
+    document.getElementById('timer-label').innerText = `${m}:${s < 10 ? '0'+s : s}`;
+}
+
+function renderLoop() {
+    if(!state.inBattle) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Река и Мосты
+    ctx.fillStyle = '#2980b9'; // Вода
+    ctx.fillRect(0, H*0.48, W, H*0.04);
+    
+    ctx.fillStyle = '#95a5a6'; // Мост левый
+    ctx.fillRect(W*0.15, H*0.47, W*0.15, H*0.06);
+    ctx.fillStyle = '#95a5a6'; // Мост правый
+    ctx.fillRect(W*0.7, H*0.47, W*0.15, H*0.06);
+
+    if(state.lastSync) {
+        // Башни (3 у каждого)
+        state.lastSync.towers.forEach(t => {
+            const isMain = t.id.includes('main');
+            ctx.fillStyle = t.owner === state.role ? '#3498db' : '#e74c3c';
             ctx.beginPath();
-            ctx.arc(t.x * canvas.width, t.y * canvas.height, 25, 0, Math.PI*2);
+            ctx.arc(t.x * W, t.y * H, isMain ? 30 : 20, 0, Math.PI*2);
             ctx.fill();
-            // HP
-            ctx.fillStyle = 'white';
-            ctx.fillRect(t.x * canvas.width - 20, t.y * canvas.height - 35, 40, 6);
+            // HP Bar
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(t.x * W - 25, t.y * H - (isMain?45:35), 50, 6);
             ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(t.x * canvas.width - 20, t.y * canvas.height - 35, 40 * (t.hp/2000), 6);
+            ctx.fillRect(t.x * W - 25, t.y * H - (isMain?45:35), 50 * (t.hp / (isMain?2000:1200)), 6);
         });
 
         // Юниты
-        data.units.forEach(u => {
-            const unitType = UNITS.find(un => un.id === u.unitId);
-            ctx.fillStyle = u.owner === battleData.role ? '#3498db' : '#e74c3c';
+        state.lastSync.units.forEach(u => {
+            ctx.fillStyle = u.owner === state.role ? '#3498db' : '#e74c3c';
             ctx.beginPath();
-            ctx.arc(u.x * canvas.width, u.y * canvas.height, 12, 0, Math.PI*2);
+            ctx.arc(u.x * W, u.y * H, 12, 0, Math.PI*2);
             ctx.fill();
-        });
-
-        // Эмодзи
-        battleData.emojis.forEach((em, i) => {
-            ctx.font = "40px Arial";
-            ctx.fillText(em.t, em.x, em.y);
-            em.l--;
-            if(em.l <= 0) battleData.emojis.splice(i, 1);
+            // Направление/Тип
+            ctx.fillStyle = 'white';
+            ctx.textAlign = "center";
+            ctx.font = "10px Arial";
+            ctx.fillText(UNIT_TYPES[u.unitId].name[0], u.x * W, u.y * H + 4);
         });
     }
 
-    function toggleEmoji() {
-        const p = document.getElementById('emoji-panel');
-        p.style.display = p.style.display === 'block' ? 'none' : 'block';
-    }
+    // Эмодзи (исчезают через 2.5 сек)
+    const now = Date.now();
+    state.emojis = state.emojis.filter(em => now - em.time < 2500);
+    state.emojis.forEach(em => {
+        ctx.font = "40px Arial";
+        const yPos = em.isOpp ? H*0.2 : H*0.75;
+        ctx.fillText(em.t, W/2, yPos);
+    });
 
-    function sendEmoji(e) {
-        socket.send(JSON.stringify({ type: 'emoji', emoji: e }));
-        toggleEmoji();
-    }
+    requestAnimationFrame(renderLoop);
+}
 
-    function showEmoji(e, isOpp) {
-        battleData.emojis.push({
-            t: e, x: canvas.width/2 - 20, y: isOpp ? 150 : canvas.height - 200, l: 60
-        });
-    }
+function finishGame(win) {
+    state.inBattle = false;
+    const change = win ? 30 : -25;
+    state.trophies = Math.max(0, state.trophies + change);
+    localStorage.setItem('p_trophies', state.trophies);
+    alert(win ? `ПОБЕДА! +30 🏆` : `ПОРАЖЕНИЕ! -25 🏆`);
+    location.reload();
+}
 
-    function showResults(win) {
-        battleData.active = false;
-        const change = win ? 30 : -25;
-        myData.trophies = Math.max(0, myData.trophies + change);
-        localStorage.setItem('bn_trophies', myData.trophies);
-        
-        document.getElementById('result-screen').style.display = 'flex';
-        document.getElementById('res-title').innerText = win ? "ПОБЕДА!" : "ПОРАЖЕНИЕ";
-        document.getElementById('res-diff').innerText = (win ? "+" : "") + change + " кубков";
-    }
-
-    init();
+init();
 </script>
 </body>
 </html>

@@ -1,9 +1,19 @@
 const express = require('express');
+const path = require('path'); // Добавь это для работы с путями
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: { origin: "*" }
 });
+
+// --- ДОБАВЬ ЭТОТ БЛОК, ЧТОБЫ УБРАТЬ "CANNOT GET /" ---
+// Это говорит серверу отдавать твой index.html при заходе на сайт
+app.use(express.static(path.join(__dirname, '.'))); 
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+// -----------------------------------------------------
 
 let waitingPlayer = null;
 let rooms = {};
@@ -11,9 +21,7 @@ let rooms = {};
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
-    // Обработка поиска матча с получением данных игрока
     socket.on('find_match', (data) => {
-        // Сохраняем ник и кубки в объекте сокета
         socket.nickname = data.nickname || "Игрок";
         socket.trophies = data.trophies || 0;
 
@@ -21,7 +29,6 @@ io.on('connection', (socket) => {
             const room = `room_${waitingPlayer.id}_${socket.id}`;
             const players = {};
             
-            // Формируем данные о игроках для отправки обоим клиентам
             players[waitingPlayer.id] = { nickname: waitingPlayer.nickname, trophies: waitingPlayer.trophies };
             players[socket.id] = { nickname: socket.nickname, trophies: socket.trophies };
 
@@ -33,7 +40,6 @@ io.on('connection', (socket) => {
                 battleData: players
             };
 
-            // Отправляем событие старта с данными о соперниках
             io.to(room).emit('start_game', { 
                 room: room, 
                 players: players 
@@ -45,7 +51,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Передача спавна юнита врагу
     socket.on('spawn_unit', (data) => {
         socket.to(data.room).emit('enemy_spawn', {
             unitId: data.unitId,

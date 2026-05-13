@@ -5,47 +5,43 @@ const io = require('socket.io')(http, {
     cors: { origin: "*" }
 });
 
-// Раздаем статику (твой HTML, картинки, если есть) из корня
-app.use(express.static(__dirname));
-
-// При заходе на главную — отдаем твой файл
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/royale.html');
-});
-
 let waitingPlayer = null;
+let rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('Подключен:', socket.id);
+    console.log('Пользователь подключился:', socket.id);
 
     socket.on('find_match', (data) => {
-        // Сохраняем данные игрока из твоего royale.html
-        socket.nickname = data.nickname || "Игрок";
-        socket.trophies = data.trophies || 0;
-
         if (waitingPlayer && waitingPlayer.id !== socket.id) {
-            const room = `room_${waitingPlayer.id}_${socket.id}`;
-            
-            const playersData = {};
-            playersData[waitingPlayer.id] = { nickname: waitingPlayer.nickname, trophies: waitingPlayer.trophies };
-            playersData[socket.id] = { nickname: socket.nickname, trophies: socket.trophies };
-
-            socket.join(room);
-            waitingPlayer.join(room);
-
-            // Отправляем старт обоим
-            io.to(room).emit('start_game', { 
-                room: room, 
-                players: playersData 
-            });
-
+            // Создаем комнату для двоих
+            const roomId = `room_${waitingPlayer.id}_${socket.id}`;
+            const enemy = waitingPlayer;
             waitingPlayer = null;
+
+            rooms[roomId] = {
+                players: {
+                    [socket.id]: { nickname: data.nickname, trophies: data.trophies },
+                    [enemy.id]: { nickname: enemy.nickname, trophies: enemy.trophies }
+                }
+            };
+
+            socket.join(roomId);
+            enemy.socket.join(roomId);
+
+            io.to(roomId).emit('start_game', {
+                room: roomId,
+                players: rooms[roomId].players
+            });
+            console.log(`Игра началась в комнате: ${roomId}`);
         } else {
-            waitingPlayer = socket;
+            waitingPlayer = { id: socket.id, socket: socket, nickname: data.nickname, trophies: data.trophies };
+            console.log('Игрок в очереди:', data.nickname);
         }
     });
 
+    // Обработка спавна юнитов
     socket.on('spawn_unit', (data) => {
+        // Пересылаем данные о юните второму игроку в комнате
         socket.to(data.room).emit('enemy_spawn', {
             unitId: data.unitId,
             x: data.x,
@@ -53,12 +49,24 @@ io.on('connection', (socket) => {
         });
     });
 
+    // НОВАЯ ФУНКЦИЯ: Обработка пинов (эмодзи)
+    socket.on('send_emoji', (data) => {
+        // Пересылаем эмодзи противнику
+        socket.to(data.room).emit('receive_emoji', {
+            emoji: data.emoji
+        });
+    });
+
     socket.on('disconnect', () => {
-        if (waitingPlayer && waitingPlayer.id === socket.id) waitingPlayer = null;
+        if (waitingPlayer && waitingPlayer.id === socket.id) {
+            waitingPlayer = null;
+        }
+        console.log('Пользователь отключился:', socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-    console.log('Сервер запущен на порту ' + PORT);
+    console.log(`Сервер запущен на порту ${PORT}`);
 });
+

@@ -1,155 +1,166 @@
+const express = require('express');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const WebSocket = require('ws');
+const path = require('path');
 
-// 1. Настройка порта для Render
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Порт от Render или 8080 для локальных тестов
 const PORT = process.env.PORT || 8080;
 
-// 2. Создание HTTP-сервера для раздачи HTML
-const server = http.createServer((req, res) => {
-    let filePath = './royale.html';
-    if (req.url === '/') filePath = './royale.html';
-
-    fs.readFile(filePath, (err, content) => {
-        if (err) {
-            res.writeHead(500);
-            res.end('Error loading royale.html');
-        } else {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(content, 'utf-8');
-        }
-    });
+// Раздаем файл royale.html при заходе на сайт
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'royale.html'));
 });
-
-// 3. Создание WebSocket сервера
-const wss = new WebSocket.Server({ server });
 
 let waitingPlayer = null;
 let games = [];
 
+// Данные юнитов (копия для расчетов на сервере)
+const UNITS_STATS = {
+    0: { hp: 500, dmg: 50, speed: 0.005, range: 0.05 }, // Рыцарь
+    1: { hp: 200, dmg: 40, speed: 0.007, range: 0.2 },  // Лучник
+    2: { hp: 1200, dmg: 80, speed: 0.003, range: 0.04 } // Гигант
+};
+
 wss.on('connection', (ws) => {
-    console.log('Новое подключение');
+    console.log('--- Новое подключение ---');
 
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
+        try {
+            const data = JSON.parse(message);
 
-        // Логика подбора игроков
-        if (data.type === 'join') {
-            handleJoin(ws, data);
-        }
+            if (data.type === 'join') {
+                handleJoin(ws, data);
+            }
 
-        // Логика выставления юнитов
-        if (data.type === 'place_unit') {
-            handleMove(ws, data);
-        }
+            if (data.type === 'place_unit') {
+                handlePlaceUnit(ws, data);
+            }
 
-        // Логика эмодзи
-        if (data.type === 'emoji') {
-            handleEmoji(ws, data);
+            if (data.type === 'emoji') {
+                handleEmoji(ws, data);
+            }
+        } catch (e) {
+            console.error("Ошибка обработки сообщения:", e);
         }
     });
 
     ws.on('close', () => {
-        if (waitingPlayer && waitingPlayer.ws === ws) {
-            waitingPlayer = null;
-        }
+        if (waitingPlayer && waitingPlayer.ws === ws) waitingPlayer = null;
+        console.log('Клиент отключился');
     });
 });
 
 function handleJoin(ws, data) {
     if (!waitingPlayer) {
         waitingPlayer = { ws, name: data.name, trophies: data.trophies };
-        console.log(`${data.name} ожидает противника...`);
+        console.log(`Игрок ${data.name} в очереди...`);
     } else {
         const p1 = waitingPlayer;
         const p2 = { ws, name: data.name, trophies: data.trophies };
         waitingPlayer = null;
 
-        const gameId = Date.now();
-        const newGame = {
-            id: gameId,
-            p1: p1,
-            p2: p2,
+        const game = {
+            id: Date.now(),
+            players: { p1, p2 },
             units: [],
             towers: [
-                { id: 't1_main', owner: 'p1', x: 0.5, y: 0.9, hp: 2000, maxHp: 2000 },
-                { id: 't1_l', owner: 'p1', x: 0.2, y: 0.8, hp: 1200, maxHp: 1200 },
-                { id: 't1_r', owner: 'p1', x: 0.8, y: 0.8, hp: 1200, maxHp: 1200 },
-                { id: 't2_main', owner: 'p2', x: 0.5, y: 0.1, hp: 2000, maxHp: 2000 },
-                { id: 't2_l', owner: 'p2', x: 0.2, y: 0.2, hp: 1200, maxHp: 1200 },
-                { id: 't2_r', owner: 'p2', x: 0.8, y: 0.2, hp: 1200, maxHp: 1200 }
+                { id: 't1_m', owner: 'p1', x: 0.5, y: 0.9, hp: 2000 },
+                { id: 't2_m', owner: 'p2', x: 0.5, y: 0.1, hp: 2000 }
             ],
             timer: 120,
-            status: 'active'
+            lastTick: Date.now()
         };
 
-        games.push(newGame);
+        games.push(game);
 
-        // Уведомляем игроков о начале
+        // Отправляем старт обоим
         p1.ws.send(JSON.stringify({ type: 'match_start', role: 'p1', oppName: p2.name, oppTrophies: p2.trophies }));
         p2.ws.send(JSON.stringify({ type: 'match_start', role: 'p2', oppName: p1.name, oppTrophies: p1.trophies }));
 
-        startGameLoop(newGame);
+        console.log(`Матч начался: ${p1.name} vs ${p2.name}`);
+        runGameLogic(game);
     }
 }
 
-function handleMove(ws, data) {
-    const game = games.find(g => g.p1.ws === ws || g.p2.ws === ws);
+function handlePlaceUnit(ws, data) {
+    const game = games.find(g => g.players.p1.ws === ws || g.players.p2.ws === ws);
     if (!game) return;
 
-    const role = (game.p1.ws === ws) ? 'p1' : 'p2';
-    
-    // Добавляем юнита в массив игры
+    const role = (game.players.p1.ws === ws) ? 'p1' : 'p2';
+    const stats = UNITS_STATS[data.unitId] || UNITS_STATS[0];
+
     game.units.push({
+        id: Math.random(),
         unitId: data.unitId,
         owner: role,
         x: data.x,
         y: data.y,
-        hp: 100 // Упрощенно
+        hp: stats.hp,
+        target: null
     });
 }
 
 function handleEmoji(ws, data) {
-    const game = games.find(g => g.p1.ws === ws || g.p2.ws === ws);
+    const game = games.find(g => g.players.p1.ws === ws || g.players.p2.ws === ws);
     if (!game) return;
-
-    const sender = (game.p1.ws === ws) ? game.p1 : game.p2;
-    const receiver = (game.p1.ws === ws) ? game.p2 : game.p1;
-
-    // Отправляем эмодзи обоим (с пометкой кто отправил)
-    sender.ws.send(JSON.stringify({ type: 'emoji', emoji: data.emoji, isOpponent: false }));
-    receiver.ws.send(JSON.stringify({ type: 'emoji', emoji: data.emoji, isOpponent: true }));
+    
+    const isP1 = game.players.p1.ws === ws;
+    game.players.p1.ws.send(JSON.stringify({ type: 'emoji', emoji: data.emoji, isOpponent: !isP1 }));
+    game.players.p2.ws.send(JSON.stringify({ type: 'emoji', emoji: data.emoji, isOpponent: isP1 }));
 }
 
-function startGameLoop(game) {
-    const interval = setInterval(() => {
-        if (game.status === 'finished') {
-            clearInterval(interval);
-            return;
-        }
+function runGameLogic(game) {
+    const loop = setInterval(() => {
+        const now = Date.now();
+        game.timer -= 1;
 
-        // Уменьшаем таймер
-        game.timer--;
-        if (game.timer <= 0) {
-            game.status = 'finished';
-            // Логика завершения по времени...
-        }
+        // Логика движения юнитов к башням
+        game.units.forEach(u => {
+            const enemyTower = game.towers.find(t => t.owner !== u.owner);
+            if (enemyTower) {
+                const dx = enemyTower.x - u.x;
+                const dy = enemyTower.y - u.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                const stats = UNITS_STATS[u.unitId] || UNITS_STATS[0];
 
-        // Простая синхронизация данных
-        const payload = JSON.stringify({
+                if (dist > stats.range) {
+                    u.x += (dx / dist) * stats.speed;
+                    u.y += (dy / dist) * stats.speed;
+                } else {
+                    enemyTower.hp -= stats.dmg / 10; // Урон в секунду
+                }
+            }
+        });
+
+        // Синхронизация
+        const state = JSON.stringify({
             type: 'sync',
             units: game.units,
             towers: game.towers,
             timer: game.timer
         });
 
-        game.p1.ws.send(payload);
-        game.p2.ws.send(payload);
+        if (game.players.p1.ws.readyState === WebSocket.OPEN) game.players.p1.ws.send(state);
+        if (game.players.p2.ws.readyState === WebSocket.OPEN) game.players.p2.ws.send(state);
 
+        // Условие завершения
+        const deadTower = game.towers.find(t => t.hp <= 0);
+        if (game.timer <= 0 || deadTower) {
+            clearInterval(loop);
+            const winner = deadTower ? (deadTower.owner === 'p1' ? 'p2' : 'p1') : 'draw';
+            const endMsg = JSON.stringify({ type: 'game_over', winner });
+            game.players.p1.ws.send(endMsg);
+            game.players.p2.ws.send(endMsg);
+            games = games.filter(g => g.id !== game.id);
+        }
     }, 1000);
 }
 
-server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`--- SERVER LIVE ON PORT ${PORT} ---`);
 });

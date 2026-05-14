@@ -6,7 +6,6 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Раздаём статику
 app.use(express.static(path.join(__dirname)));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'royale.html'));
@@ -15,18 +14,118 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Хранилище игроков и матчей
-const players = new Map(); // playerId -> { ws, nick, cups, status, opponentId, matchId }
-const searchingPlayers = []; // Очередь игроков в поиске
-const matches = new Map(); // matchId -> { player1, player2, gameState }
+const players = new Map();
+const searchingPlayers = [];
+const matches = new Map();
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
 
+// Создание матча
+function createMatch(player1Id, player2Id) {
+  const matchId = generateId();
+  const player1 = players.get(player1Id);
+  const player2 = players.get(player2Id);
+  
+  if (!player1 || !player2) return null;
+  
+  console.log(`🎮 Матч: ${player1.nick} vs ${player2.nick}`);
+  
+  player1.status = 'playing';
+  player2.status = 'playing';
+  player1.opponentId = player2Id;
+  player2.opponentId = player1Id;
+  player1.matchId = matchId;
+  player2.matchId = matchId;
+  
+  // Создаем состояние матча
+  const match = {
+    id: matchId,
+    player1: player1Id,
+    player2: player2Id,
+    // Башни хранятся отдельно для каждого игрока
+    player1Towers: [
+      { x: 60, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side' },
+      { x: 185, y: 490, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main' },
+      { x: 310, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side' }
+    ],
+    player2Towers: [
+      { x: 60, y: 50, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side' },
+      { x: 185, y: 15, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main' },
+      { x: 310, y: 50, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side' }
+    ],
+    units: []
+  };
+  
+  matches.set(matchId, match);
+  
+  // Отправляем matchFound игроку 1 (он видит врага сверху)
+  player1.ws.send(JSON.stringify({
+    type: 'matchFound',
+    opponent: player2Id,
+    opponentNick: player2.nick,
+    opponentCups: player2.cups,
+    matchId: matchId,
+    mySide: 'bottom'
+  }));
+  
+  // Отправляем matchFound игроку 2 (он видит врага сверху)
+  player2.ws.send(JSON.stringify({
+    type: 'matchFound',
+    opponent: player1Id,
+    opponentNick: player1.nick,
+    opponentCups: player1.cups,
+    matchId: matchId,
+    mySide: 'bottom'
+  }));
+  
+  return match;
+}
+
+// Отправка состояния игроку
+function sendGameState(playerId, match) {
+  const player = players.get(playerId);
+  if (!player || player.ws.readyState !== WebSocket.OPEN) return;
+  
+  const isPlayer1 = match.player1 === playerId;
+  
+  // Определяем, какие башни мои, а какие врага
+  const myTowers = isPlayer1 ? match.player1Towers : match.player2Towers;
+  const enemyTowers = isPlayer1 ? match.player2Towers : match.player1Towers;
+  
+  // Фильтруем юнитов: мои и вражеские
+  const myUnits = match.units
+    .filter(u => u.owner === playerId)
+    .map(u => ({ ...u, owner: 'player' }));
+  const enemyUnits = match.units
+    .filter(u => u.owner !== playerId)
+    .map(u => ({ ...u, owner: 'enemy' }));
+  
+  const state = {
+    type: 'gameState',
+    units: [...myUnits, ...enemyUnits],
+    towers: {
+      player: myTowers.map(t => ({ ...t, owner: 'player' })),
+      enemy: enemyTowers.map(t => ({ ...t, owner: 'enemy' }))
+    }
+  };
+  
+  player.ws.send(JSON.stringify(state));
+}
+
+// Отправка состояния обоим игрокам
+function broadcastGameState(matchId) {
+  const match = matches.get(matchId);
+  if (!match) return;
+  
+  sendGameState(match.player1, match);
+  sendGameState(match.player2, match);
+}
+
 // Поиск соперника
 function tryMatchPlayers() {
-  console.log(`🔍 Поиск матча. В очереди: ${searchingPlayers.length} игроков`);
+  console.log(`🔍 В очереди: ${searchingPlayers.length}`);
   
   while (searchingPlayers.length >= 2) {
     const player1Id = searchingPlayers.shift();
@@ -36,126 +135,21 @@ function tryMatchPlayers() {
     const player2 = players.get(player2Id);
     
     if (!player1 || !player2) continue;
-    if (player1.ws.readyState !== WebSocket.OPEN || player2.ws.readyState !== WebSocket.OPEN) continue;
+    if (player1.ws.readyState !== WebSocket.OPEN || player2.ws.readyState !== WebSocket.OPEN) {
+      // Возвращаем в очередь того, кто еще подключен
+      if (player1 && player1.ws.readyState === WebSocket.OPEN) {
+        searchingPlayers.unshift(player1Id);
+      }
+      if (player2 && player2.ws.readyState === WebSocket.OPEN) {
+        searchingPlayers.unshift(player2Id);
+      }
+      continue;
+    }
     
-    console.log(`✅ Создаём матч: ${player1.nick} vs ${player2.nick}`);
     createMatch(player1Id, player2Id);
   }
 }
 
-// Создание матча
-function createMatch(player1Id, player2Id) {
-  const matchId = generateId();
-  const player1 = players.get(player1Id);
-  const player2 = players.get(player2Id);
-  
-  if (!player1 || !player2) {
-    console.error('❌ Ошибка: игроки не найдены');
-    return null;
-  }
-  
-  console.log(`🎮 Матч #${matchId}: ${player1.nick} (🏆${player1.cups}) vs ${player2.nick} (🏆${player2.cups})`);
-  
-  // Обновляем статусы
-  player1.status = 'playing';
-  player2.status = 'playing';
-  player1.opponentId = player2Id;
-  player2.opponentId = player1Id;
-  player1.matchId = matchId;
-  player2.matchId = matchId;
-  
-  const match = {
-    id: matchId,
-    player1: player1Id,
-    player2: player2Id,
-    gameState: {
-      units: [],
-      towers: {
-        player1: [
-          { x: 60, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' },
-          { x: 185, y: 490, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main', owner: 'player' },
-          { x: 310, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' }
-        ],
-        player2: [
-          { x: 60, y: 50, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' },
-          { x: 185, y: 15, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main', owner: 'player' },
-          { x: 310, y: 50, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' }
-        ]
-      }
-    }
-  };
-  
-  matches.set(matchId, match);
-  
-  // Отправляем matchFound первому игроку
-  if (player1.ws.readyState === WebSocket.OPEN) {
-    const msg1 = JSON.stringify({
-      type: 'matchFound',
-      opponent: player2Id,
-      opponentNick: player2.nick,
-      opponentCups: player2.cups,
-      matchId: matchId
-    });
-    player1.ws.send(msg1);
-    console.log(`📤 matchFound -> ${player1.nick}`);
-  }
-  
-  // Отправляем matchFound второму игроку
-  if (player2.ws.readyState === WebSocket.OPEN) {
-    const msg2 = JSON.stringify({
-      type: 'matchFound',
-      opponent: player1Id,
-      opponentNick: player1.nick,
-      opponentCups: player1.cups,
-      matchId: matchId
-    });
-    player2.ws.send(msg2);
-    console.log(`📤 matchFound -> ${player2.nick}`);
-  }
-  
-  return match;
-}
-
-// Отправка состояния игры
-function broadcastGameState(matchId) {
-  const match = matches.get(matchId);
-  if (!match) return;
-  
-  const player1 = players.get(match.player1);
-  const player2 = players.get(match.player2);
-  
-  // Игроку 1
-  if (player1 && player1.ws.readyState === WebSocket.OPEN) {
-    player1.ws.send(JSON.stringify({
-      type: 'gameState',
-      units: match.gameState.units.map(u => ({
-        ...u,
-        owner: u.owner === 'player2' ? 'enemy' : u.owner
-      })),
-      towers: {
-        player: match.gameState.towers.player1,
-        enemy: match.gameState.towers.player2.map(t => ({...t, owner: 'enemy'}))
-      }
-    }));
-  }
-  
-  // Игроку 2
-  if (player2 && player2.ws.readyState === WebSocket.OPEN) {
-    player2.ws.send(JSON.stringify({
-      type: 'gameState',
-      units: match.gameState.units.map(u => ({
-        ...u,
-        owner: u.owner === 'player1' ? 'enemy' : u.owner
-      })),
-      towers: {
-        player: match.gameState.towers.player2,
-        enemy: match.gameState.towers.player1.map(t => ({...t, owner: 'enemy'}))
-      }
-    }));
-  }
-}
-
-// Обработка WebSocket соединений
 wss.on('connection', (ws) => {
   let playerId = null;
   
@@ -168,9 +162,8 @@ wss.on('connection', (ws) => {
       switch(message.type) {
         case 'setId':
           playerId = message.id;
-          console.log(`🆔 Игрок подключился: ${playerId} (${message.nick})`);
+          console.log(`🆔 ${message.nick} (${playerId})`);
           
-          // Создаём или обновляем игрока
           if (!players.has(playerId)) {
             players.set(playerId, {
               ws: ws,
@@ -180,78 +173,55 @@ wss.on('connection', (ws) => {
               opponentId: null,
               matchId: null
             });
-            console.log(`👤 Новый игрок: ${message.nick} (🏆${message.cups || 0})`);
           } else {
-            const player = players.get(playerId);
-            player.ws = ws;
-            player.nick = message.nick || player.nick;
-            player.cups = message.cups || player.cups;
-            // Если игрок был в поиске, возвращаем в очередь
-            if (player.status === 'searching') {
-              player.status = 'idle';
-              // Удаляем из очереди если есть
-              const idx = searchingPlayers.indexOf(playerId);
-              if (idx > -1) searchingPlayers.splice(idx, 1);
-            }
-            console.log(`🔄 Игрок переподключился: ${player.nick}`);
+            const p = players.get(playerId);
+            p.ws = ws;
+            p.nick = message.nick || p.nick;
+            p.cups = message.cups || p.cups;
+            // Если был в поиске - удаляем из очереди
+            const idx = searchingPlayers.indexOf(playerId);
+            if (idx > -1) searchingPlayers.splice(idx, 1);
+            p.status = 'idle';
           }
           
-          // Подтверждаем ID
           ws.send(JSON.stringify({ type: 'idAssigned', id: playerId }));
           break;
           
         case 'findMatch':
-          if (!playerId) {
-            console.error('❌ findMatch: нет playerId');
-            return;
-          }
-          
+          if (!playerId) return;
           const seeker = players.get(playerId);
-          if (!seeker) {
-            console.error('❌ findMatch: игрок не найден');
-            return;
-          }
+          if (!seeker) return;
           
-          // Обновляем данные игрока
           seeker.nick = message.nick || seeker.nick;
           seeker.cups = message.cups || seeker.cups;
           seeker.status = 'searching';
           
-          // Добавляем в очередь поиска
           if (!searchingPlayers.includes(playerId)) {
             searchingPlayers.push(playerId);
-            console.log(`🔍 ${seeker.nick} добавлен в очередь поиска (всего: ${searchingPlayers.length})`);
+            console.log(`🔍 ${seeker.nick} ищет матч (в очереди: ${searchingPlayers.length})`);
           }
           
-          // Подтверждаем поиск
           ws.send(JSON.stringify({ type: 'searching' }));
-          
-          // Пробуем найти матч
           tryMatchPlayers();
           break;
           
         case 'placeUnit':
           if (!playerId) return;
           const player = players.get(playerId);
-          if (!player || !player.matchId) {
-            console.error('❌ placeUnit: игрок не в матче');
-            return;
-          }
+          if (!player || !player.matchId) return;
           
           const match = matches.get(player.matchId);
-          if (!match) {
-            console.error('❌ placeUnit: матч не найден');
-            return;
-          }
+          if (!match) return;
           
-          const isPlayer1 = match.player1 === playerId;
-          const unitData = {
+          // Добавляем юнит с правильным owner (ID игрока)
+          const unit = {
             ...message.unit,
-            owner: isPlayer1 ? 'player1' : 'player2',
+            owner: playerId, // Владелец - ID игрока
             id: message.unit.id || generateId()
           };
           
-          match.gameState.units.push(unitData);
+          match.units.push(unit);
+          console.log(`👤 ${player.nick} разместил ${unit.icon || unit.type}`);
           broadcastGameState(match.id);
           break;
           
@@ -263,30 +233,30 @@ wss.on('connection', (ws) => {
           const currentMatch = matches.get(currentPlayer.matchId);
           if (!currentMatch) return;
           
-          const playerIsPlayer1 = currentMatch.player1 === playerId;
-          
-          // Обновляем юниты
+          // Обновляем юниты: удаляем старые юниты этого игрока, добавляем новые
           if (message.units) {
-            // Удаляем старые юниты этого игрока
-            currentMatch.gameState.units = currentMatch.gameState.units.filter(u => 
-              u.owner !== (playerIsPlayer1 ? 'player1' : 'player2')
-            );
-            // Добавляем новые
-            currentMatch.gameState.units.push(...message.units.map(u => ({
+            currentMatch.units = currentMatch.units.filter(u => u.owner !== playerId);
+            currentMatch.units.push(...message.units.map(u => ({
               ...u,
-              owner: playerIsPlayer1 ? 'player1' : 'player2'
+              owner: playerId
             })));
           }
           
-          // Обновляем башни
+          // Обновляем башни игрока
           if (message.towers && message.towers.player) {
-            if (playerIsPlayer1) {
-              currentMatch.gameState.towers.player1 = message.towers.player;
+            const isPlayer1 = currentMatch.player1 === playerId;
+            if (isPlayer1) {
+              currentMatch.player1Towers = message.towers.player.map(t => ({
+                x: t.x, y: t.y, w: t.w, h: t.h, hp: t.hp, maxHp: t.maxHp, type: t.type
+              }));
             } else {
-              currentMatch.gameState.towers.player2 = message.towers.player;
+              currentMatch.player2Towers = message.towers.player.map(t => ({
+                x: t.x, y: t.y, w: t.w, h: t.h, hp: t.hp, maxHp: t.maxHp, type: t.type
+              }));
             }
           }
           
+          // Отправляем обновленное состояние обоим
           broadcastGameState(currentMatch.id);
           break;
           
@@ -295,9 +265,9 @@ wss.on('connection', (ws) => {
           const emojiPlayer = players.get(playerId);
           if (!emojiPlayer || !emojiPlayer.opponentId) return;
           
-          const opponentPlayer = players.get(emojiPlayer.opponentId);
-          if (opponentPlayer && opponentPlayer.ws.readyState === WebSocket.OPEN) {
-            opponentPlayer.ws.send(JSON.stringify({
+          const opponent = players.get(emojiPlayer.opponentId);
+          if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
+            opponent.ws.send(JSON.stringify({
               type: 'emoji',
               emoji: message.emoji,
               from: playerId
@@ -313,66 +283,56 @@ wss.on('connection', (ws) => {
           const endMatch = matches.get(endPlayer.matchId);
           if (!endMatch) return;
           
-          const winner = message.result === 'win' ? playerId : 
-                        (message.result === 'lose' ? endPlayer.opponentId : null);
-          
-          console.log(`🏁 Матч #${endMatch.id} завершён. Победитель: ${winner || 'ничья'}`);
-          
-          // Уведомляем обоих игроков
           const p1 = players.get(endMatch.player1);
           const p2 = players.get(endMatch.player2);
           
-          if (p1 && p1.ws.readyState === WebSocket.OPEN) {
-            p1.ws.send(JSON.stringify({
-              type: 'battleEnd',
-              result: winner === endMatch.player1 ? 'win' : (winner === endMatch.player2 ? 'lose' : 'draw'),
-              winner: winner
-            }));
+          console.log(`🏁 Матч завершен`);
+          
+          // Определяем результат для каждого
+          let result1, result2;
+          if (message.result === 'win') {
+            result1 = endMatch.player1 === playerId ? 'win' : 'lose';
+            result2 = endMatch.player2 === playerId ? 'win' : 'lose';
+          } else if (message.result === 'lose') {
+            result1 = endMatch.player1 === playerId ? 'lose' : 'win';
+            result2 = endMatch.player2 === playerId ? 'lose' : 'win';
+          } else {
+            result1 = 'draw';
+            result2 = 'draw';
           }
           
+          if (p1 && p1.ws.readyState === WebSocket.OPEN) {
+            p1.ws.send(JSON.stringify({ type: 'battleEnd', result: result1 }));
+          }
           if (p2 && p2.ws.readyState === WebSocket.OPEN) {
-            p2.ws.send(JSON.stringify({
-              type: 'battleEnd',
-              result: winner === endMatch.player2 ? 'win' : (winner === endMatch.player1 ? 'lose' : 'draw'),
-              winner: winner
-            }));
+            p2.ws.send(JSON.stringify({ type: 'battleEnd', result: result2 }));
           }
           
           // Очистка
-          if (p1) {
-            p1.status = 'idle';
-            p1.opponentId = null;
-            p1.matchId = null;
-          }
-          if (p2) {
-            p2.status = 'idle';
-            p2.opponentId = null;
-            p2.matchId = null;
-          }
+          [p1, p2].forEach(p => {
+            if (p) {
+              p.status = 'idle';
+              p.opponentId = null;
+              p.matchId = null;
+            }
+          });
           
           matches.delete(endMatch.id);
-          console.log('🗑️ Матч удалён, игроки свободны');
           break;
       }
     } catch (error) {
-      console.error('❌ Ошибка обработки сообщения:', error);
+      console.error('❌ Ошибка:', error);
     }
   });
   
   ws.on('close', () => {
-    console.log(`🔌 Отключение: ${playerId || 'неизвестный'}`);
-    
+    console.log(`🔌 Отключение: ${playerId}`);
     if (playerId) {
-      // Удаляем из очереди поиска
-      const searchIdx = searchingPlayers.indexOf(playerId);
-      if (searchIdx > -1) {
-        searchingPlayers.splice(searchIdx, 1);
-        console.log(`🗑️ ${playerId} удалён из очереди поиска`);
-      }
+      const idx = searchingPlayers.indexOf(playerId);
+      if (idx > -1) searchingPlayers.splice(idx, 1);
       
       const player = players.get(playerId);
       if (player) {
-        // Если был в матче - завершаем
         if (player.matchId) {
           const match = matches.get(player.matchId);
           if (match) {
@@ -381,35 +341,22 @@ wss.on('connection', (ws) => {
             if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
               opponent.ws.send(JSON.stringify({
                 type: 'battleEnd',
-                result: 'win',
-                winner: opponentId
+                result: 'win'
               }));
-              console.log(`🏆 ${opponent.nick} победил из-за отключения соперника`);
             }
             matches.delete(player.matchId);
           }
         }
-        
         player.status = 'disconnected';
-        // Удаляем через 30 секунд
         setTimeout(() => {
           const p = players.get(playerId);
-          if (p && p.status === 'disconnected') {
-            players.delete(playerId);
-            console.log(`🗑️ Игрок ${playerId} удалён`);
-          }
+          if (p && p.status === 'disconnected') players.delete(playerId);
         }, 30000);
       }
     }
   });
 });
 
-// Логирование состояния каждые 10 секунд
-setInterval(() => {
-  console.log(`📊 Статистика: ${players.size} игроков, ${searchingPlayers.length} в поиске, ${matches.size} матчей`);
-}, 10000);
-
 server.listen(PORT, () => {
-  console.log(`👑 Сервер BUM ROYALE запущен на порту ${PORT}`);
-  console.log(`🌐 http://localhost:${PORT}`);
+  console.log(`👑 Сервер запущен на порту ${PORT}`);
 });

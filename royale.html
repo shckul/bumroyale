@@ -129,6 +129,7 @@
       box-shadow: 0 6px 0 #8f2e1c;
       transition: 0.1s linear;
       margin-top: 10px;
+      width: 100%;
     }
     .fight-btn:active {
       transform: translateY(3px);
@@ -144,6 +145,12 @@
       text-align: center;
       margin-top: 10px;
       display: none;
+      font-size: 18px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
     .profile-input {
       background: #2f354a;
@@ -194,6 +201,7 @@
       border-radius: 10px;
       width: 0%;
       box-shadow: 0 0 12px #c24eff;
+      transition: width 0.1s;
     }
     .elixir-bg {
       flex: 1;
@@ -262,17 +270,17 @@
   <!-- Главное меню -->
   <div id="mainMenu" class="screen active main-menu">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="deck">🗂 Колода</button>
       <button class="tab-btn" data-tab="battle">⚔️ Бой</button>
+      <button class="tab-btn" data-tab="deck">🗂 Колода</button>
       <button class="tab-btn" data-tab="profile">👤 Профиль</button>
     </div>
-    <div id="tabDeck" class="panel">
-      <div class="unit-grid" id="unitGrid"></div>
-      <div class="queue-preview" id="queuePreview"></div>
-    </div>
-    <div id="tabBattle" class="panel" style="display: none;">
+    <div id="tabBattle" class="panel">
       <button id="findMatchBtn" class="fight-btn">⚡ В БОЙ</button>
       <p id="searchStatus" class="search-status">🔍 Поиск соперника...</p>
+    </div>
+    <div id="tabDeck" class="panel" style="display: none;">
+      <div class="unit-grid" id="unitGrid"></div>
+      <div class="queue-preview" id="queuePreview"></div>
     </div>
     <div id="tabProfile" class="panel" style="display: none;">
       <input type="text" id="nicknameInput" class="profile-input" placeholder="Введи никнейм" maxlength="16">
@@ -290,8 +298,8 @@
     <canvas id="battleCanvas" width="400" height="380"></canvas>
     <div class="elixir-bar-container">
       <span>💧</span>
-      <div class="elixir-bg"><div id="elixirFill" class="elixir-fill" style="width: 50%;"></div></div>
-      <span class="elixir-number" id="elixirValue">5.0</span>
+      <div class="elixir-bg"><div id="elixirFill" class="elixir-fill" style="width: 0%;"></div></div>
+      <span class="elixir-number" id="elixirValue">0.0</span>
       <button id="emojiToggle" class="emoji-btn">💬</button>
     </div>
     <div class="hand-cards" id="handCards"></div>
@@ -330,7 +338,7 @@
     let battleDeck = [];
     let activeHand = [];
     let queueCard = null;
-    let elixir = 5.0;
+    let elixir = 0;
     let maxElixir = 10;
     let elixirRate = 0.35;
     let gameTime = 120;
@@ -411,17 +419,21 @@
       preview.innerHTML = `<span>⏳ Очередь: ${queueUnit.icon} ${queueUnit.name} (💰${queueUnit.cost})</span>`;
     }
 
-    // ---------- ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ----------
+    // ---------- ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК (Бой первый) ----------
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const tab = btn.dataset.tab;
-        document.getElementById('tabDeck').style.display = tab==='deck' ? 'flex':'none';
         document.getElementById('tabBattle').style.display = tab==='battle' ? 'flex':'none';
+        document.getElementById('tabDeck').style.display = tab==='deck' ? 'flex':'none';
         document.getElementById('tabProfile').style.display = tab==='profile' ? 'flex':'none';
       });
     });
+
+    // Активируем вкладку "Бой" по умолчанию
+    document.querySelector('[data-tab="battle"]').classList.add('active');
+    document.getElementById('tabBattle').style.display = 'flex';
 
     document.getElementById('saveProfileBtn').onclick = () => {
       playerNick = document.getElementById('nicknameInput').value.trim() || 'Игрок';
@@ -437,53 +449,58 @@
       const host = window.location.host;
       
       console.log('🔌 Подключение к WebSocket:', `${protocol}//${host}`);
-      ws = new WebSocket(`${protocol}//${host}`);
       
-      ws.onopen = () => {
-        console.log('✅ WebSocket подключен');
-        // Генерируем или используем сохраненный ID
-        if (!playerId) {
-          playerId = localStorage.getItem('royalePlayerId');
-          if (!playerId) {
-            playerId = 'p_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('royalePlayerId', playerId);
-          }
-        }
-        // Отправляем данные игрока
-        ws.send(JSON.stringify({ 
-          type: 'setId', 
-          id: playerId, 
-          nick: playerNick, 
-          cups: cups 
-        }));
+      try {
+        ws = new WebSocket(`${protocol}//${host}`);
         
-        // Если был поиск - продолжаем
-        if (searchingMatch) {
-          startSearching();
-        }
-      };
-      
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          console.log('📩 Получено сообщение:', msg.type);
-          handleMessage(msg);
-        } catch (error) {
-          console.error('Ошибка обработки сообщения:', error);
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('❌ Ошибка WebSocket:', error);
-        stopSearching();
-      };
-      
-      ws.onclose = () => {
-        console.log('🔌 WebSocket отключен');
-        stopSearching();
-        // Переподключение через 3 секунды
+        ws.onopen = () => {
+          console.log('✅ WebSocket подключен');
+          // Генерируем или используем сохраненный ID
+          if (!playerId) {
+            playerId = localStorage.getItem('royalePlayerId');
+            if (!playerId) {
+              playerId = 'p_' + Math.random().toString(36).substr(2, 9);
+              localStorage.setItem('royalePlayerId', playerId);
+            }
+          }
+          // Отправляем данные игрока
+          send({ 
+            type: 'setId', 
+            id: playerId, 
+            nick: playerNick, 
+            cups: cups 
+          });
+          
+          // Если был поиск - продолжаем
+          if (searchingMatch) {
+            startSearching();
+          }
+        };
+        
+        ws.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            console.log('📩 Получено сообщение:', msg.type);
+            handleMessage(msg);
+          } catch (error) {
+            console.error('Ошибка обработки сообщения:', error);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('❌ Ошибка WebSocket:', error);
+          stopSearching();
+        };
+        
+        ws.onclose = () => {
+          console.log('🔌 WebSocket отключен, переподключение через 2с...');
+          stopSearching();
+          setTimeout(connectWebSocket, 2000);
+        };
+      } catch (error) {
+        console.error('Ошибка создания WebSocket:', error);
         setTimeout(connectWebSocket, 3000);
-      };
+      }
     }
 
     function handleMessage(msg) {
@@ -495,12 +512,10 @@
           
         case 'searching':
           console.log('🔍 Поиск соперника...');
-          document.getElementById('searchStatus').style.display = 'block';
-          document.getElementById('findMatchBtn').disabled = true;
           break;
           
         case 'matchFound':
-          console.log('⚔️ Матч найден!');
+          console.log('⚔️ Матч найден!', msg);
           opponentId = msg.opponent;
           opponentNick = msg.opponentNick || 'Противник';
           stopSearching();
@@ -525,8 +540,14 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(msg));
       } else {
-        console.warn('⚠️ WebSocket не подключен');
+        console.warn('⚠️ WebSocket не подключен, пытаемся переподключиться...');
         connectWebSocket();
+        // Повторная попытка через 500мс
+        setTimeout(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg));
+          }
+        }, 500);
       }
     }
 
@@ -537,11 +558,24 @@
       document.getElementById('findMatchBtn').disabled = true;
       
       if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('📤 Отправка запроса на поиск матча');
         send({ 
           type: 'findMatch', 
           nick: playerNick, 
           cups: cups 
         });
+      } else {
+        console.log('⏳ Ожидание подключения WebSocket...');
+        connectWebSocket();
+        setTimeout(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            send({ 
+              type: 'findMatch', 
+              nick: playerNick, 
+              cups: cups 
+            });
+          }
+        }, 1000);
       }
     }
     
@@ -552,14 +586,14 @@
     }
 
     document.getElementById('findMatchBtn').onclick = () => {
+      console.log('🖱️ Кнопка "В БОЙ" нажата');
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         connectWebSocket();
-        // Даем время на подключение
         setTimeout(() => {
           if (ws && ws.readyState === WebSocket.OPEN) {
             startSearching();
           }
-        }, 500);
+        }, 800);
       } else {
         startSearching();
       }
@@ -567,10 +601,11 @@
 
     // ---------- БОЙ ----------
     function startBattle() {
+      console.log('🎮 Запуск боя!');
       battleDeck = [...deck];
       activeHand = battleDeck.slice(0,4).map(idx => ALL_UNITS[idx]);
       queueCard = ALL_UNITS[battleDeck[4]];
-      elixir = 5.0;
+      elixir = 0; // Начинаем с 0 эликсира!
       gameTime = 120;
       suddenDeath = false;
       matchActive = true;
@@ -579,8 +614,8 @@
       
       document.getElementById('enemyInfo').textContent = `👤 ${opponentNick}`;
       document.getElementById('timerDisplay').textContent = '2:00';
-      document.getElementById('elixirValue').textContent = '5.0';
-      document.getElementById('elixirFill').style.width = '50%';
+      document.getElementById('elixirValue').textContent = '0.0';
+      document.getElementById('elixirFill').style.width = '0%';
       
       mainMenu.classList.remove('active');
       battleScreen.classList.add('active');
@@ -643,7 +678,10 @@
       if (mouseY < 200) return;
       
       const card = activeHand[selectedCardIndex];
-      if (elixir < card.cost) return;
+      if (elixir < card.cost) {
+        console.log('❌ Недостаточно эликсира!');
+        return;
+      }
       
       elixir -= card.cost;
       
@@ -678,7 +716,6 @@
       
       // Обновляем вражеские юниты
       if (msg.units) {
-        // Оставляем своих юнитов, заменяем вражеских
         units = units.filter(u => u.owner === 'player');
         const enemyUnits = msg.units.filter(u => u.owner === 'enemy');
         units.push(...enemyUnits);
@@ -729,6 +766,7 @@
         }
       }
       
+      // Эликсир растет со временем
       const rate = suddenDeath ? 0.7 : 0.35;
       elixir = Math.min(maxElixir, elixir + rate * dt);
       
@@ -738,12 +776,6 @@
       updateHUD();
       
       if (matchActive) {
-        // Отправляем состояние на сервер каждые 100мс
-        send({ 
-          type: 'stateUpdate', 
-          units: units.filter(u => u.owner === 'player'), 
-          towers: { player: playerTowers } 
-        });
         animationFrameId = requestAnimationFrame(gameLoop);
       }
     }
@@ -780,10 +812,7 @@
         }
       });
       
-      // Удаляем мертвых юнитов
       units = units.filter(u => u.hp > 0);
-      
-      // Удаляем уничтоженные башни из целей
       playerTowers = playerTowers.filter(t => t.hp > 0);
       enemyTowers = enemyTowers.filter(t => t.hp > 0);
     }
@@ -855,15 +884,12 @@
     function drawCanvas() {
       ctx.clearRect(0, 0, 400, 380);
       
-      // Трава
       ctx.fillStyle = '#3a5a3a';
       ctx.fillRect(0, 0, 400, 380);
       
-      // Река
       ctx.fillStyle = '#2f6f8f';
       ctx.fillRect(0, 180, 400, 20);
       
-      // Башни
       [...enemyTowers, ...playerTowers].forEach(t => {
         if (t.hp <= 0) return;
         
@@ -872,7 +898,6 @@
         ctx.arc(t.x, t.y, 16, 0, Math.PI * 2);
         ctx.fill();
         
-        // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(t.x - 15, t.y - 25, 30, 4);
         ctx.fillStyle = '#2ecc71';
@@ -883,7 +908,6 @@
         ctx.font = 'bold 10px sans-serif';
         ctx.fillText(Math.ceil(t.hp), t.x - 12, t.y - 30);
         
-        // Эмодзи над башней
         if (t.emoji) {
           ctx.font = '24px sans-serif';
           ctx.fillText(t.emoji.symbol, t.x - 12, t.y - 40);
@@ -892,7 +916,6 @@
         }
       });
       
-      // Юниты
       units.forEach(u => {
         if (u.hp <= 0) return;
         
@@ -901,7 +924,6 @@
         ctx.arc(u.x, u.y, 10, 0, 2 * Math.PI);
         ctx.fill();
         
-        // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(u.x - 10, u.y - 18, 20, 3);
         ctx.fillStyle = '#2ecc71';

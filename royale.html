@@ -134,6 +134,17 @@
       transform: translateY(3px);
       box-shadow: 0 2px 0 #8f2e1c;
     }
+    .fight-btn:disabled {
+      background: #666;
+      box-shadow: 0 6px 0 #444;
+      cursor: not-allowed;
+    }
+    .search-status {
+      color: #f7c948;
+      text-align: center;
+      margin-top: 10px;
+      display: none;
+    }
     .profile-input {
       background: #2f354a;
       border: none;
@@ -148,7 +159,6 @@
       font-weight: bold;
       color: #f7c948;
     }
-    /* Боевой экран */
     .battle-hud {
       display: flex;
       justify-content: space-between;
@@ -262,7 +272,7 @@
     </div>
     <div id="tabBattle" class="panel" style="display: none;">
       <button id="findMatchBtn" class="fight-btn">⚡ В БОЙ</button>
-      <p style="color:#aaa; margin-top:12px;">Поиск соперника...</p>
+      <p id="searchStatus" class="search-status">🔍 Поиск соперника...</p>
     </div>
     <div id="tabProfile" class="panel" style="display: none;">
       <input type="text" id="nicknameInput" class="profile-input" placeholder="Введи никнейм" maxlength="16">
@@ -316,14 +326,14 @@
     ];
 
     // ---------- СОСТОЯНИЕ ----------
-    let deck = [];              // 5 выбранных юнитов (индексы ALL_UNITS)
-    let battleDeck = [];       // копия для боя
-    let activeHand = [];       // 4 карты в руке
-    let queueCard = null;      // 1 карта в очереди
+    let deck = [];
+    let battleDeck = [];
+    let activeHand = [];
+    let queueCard = null;
     let elixir = 5.0;
     let maxElixir = 10;
-    let elixirRate = 0.35;     // единиц в секунду
-    let gameTime = 120;        // 2 минуты
+    let elixirRate = 0.35;
+    let gameTime = 120;
     let suddenDeath = false;
     let matchActive = false;
     let playerNick = 'Игрок';
@@ -335,7 +345,8 @@
     let playerId = null;
     let opponentId = null;
     let ws = null;
-    let selectedCardIndex = null; // индекс в activeHand
+    let selectedCardIndex = null;
+    let searchingMatch = false;
 
     // DOM элементы
     const mainMenu = document.getElementById('mainMenu');
@@ -353,6 +364,7 @@
       document.getElementById('nicknameInput').value = playerNick;
       document.getElementById('cupsCount').textContent = cups;
     }
+    
     function saveProfile() {
       localStorage.setItem('royaleNick', playerNick);
       localStorage.setItem('royaleCups', cups);
@@ -360,7 +372,7 @@
 
     function initDeck() {
       if (deck.length === 0) {
-        deck = [0,1,2,3,4]; // первые 5 по умолчанию
+        deck = [0,1,2,3,4];
       }
       renderDeckGrid();
       updateQueuePreview();
@@ -380,11 +392,11 @@
 
     function toggleDeckUnit(idx) {
       if (deck.includes(idx)) {
-        if (deck.length <= 5) return; // минимум 5
+        if (deck.length <= 5) return;
         deck = deck.filter(i => i !== idx);
       } else {
         if (deck.length >= 5) {
-          deck.shift(); // убираем первый
+          deck.shift();
         }
         deck.push(idx);
       }
@@ -395,7 +407,7 @@
     function updateQueuePreview() {
       const preview = document.getElementById('queuePreview');
       if (!deck.length) return;
-      const queueUnit = ALL_UNITS[deck[4]]; // последний в колоде - очередь
+      const queueUnit = ALL_UNITS[deck[4]];
       preview.innerHTML = `<span>⏳ Очередь: ${queueUnit.icon} ${queueUnit.name} (💰${queueUnit.cost})</span>`;
     }
 
@@ -420,39 +432,89 @@
     // ---------- WEBSOCKET ----------
     function connectWebSocket() {
       if (ws && ws.readyState === WebSocket.OPEN) return;
+      
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname.includes('render') ? window.location.host : 'localhost:3000';
+      const host = window.location.host;
+      
+      console.log('🔌 Подключение к WebSocket:', `${protocol}//${host}`);
       ws = new WebSocket(`${protocol}//${host}`);
       
       ws.onopen = () => {
-        console.log('WS connected');
-        if (playerId) {
-          ws.send(JSON.stringify({ type: 'setId', id: playerId, nick: playerNick, cups }));
+        console.log('✅ WebSocket подключен');
+        // Генерируем или используем сохраненный ID
+        if (!playerId) {
+          playerId = localStorage.getItem('royalePlayerId');
+          if (!playerId) {
+            playerId = 'p_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('royalePlayerId', playerId);
+          }
+        }
+        // Отправляем данные игрока
+        ws.send(JSON.stringify({ 
+          type: 'setId', 
+          id: playerId, 
+          nick: playerNick, 
+          cups: cups 
+        }));
+        
+        // Если был поиск - продолжаем
+        if (searchingMatch) {
+          startSearching();
         }
       };
+      
       ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        handleMessage(msg);
+        try {
+          const msg = JSON.parse(e.data);
+          console.log('📩 Получено сообщение:', msg.type);
+          handleMessage(msg);
+        } catch (error) {
+          console.error('Ошибка обработки сообщения:', error);
+        }
       };
-      ws.onclose = () => setTimeout(connectWebSocket, 3000);
+      
+      ws.onerror = (error) => {
+        console.error('❌ Ошибка WebSocket:', error);
+        stopSearching();
+      };
+      
+      ws.onclose = () => {
+        console.log('🔌 WebSocket отключен');
+        stopSearching();
+        // Переподключение через 3 секунды
+        setTimeout(connectWebSocket, 3000);
+      };
     }
 
     function handleMessage(msg) {
       switch(msg.type) {
         case 'idAssigned':
+          console.log('🆔 ID подтвержден:', msg.id);
           playerId = msg.id;
           break;
+          
+        case 'searching':
+          console.log('🔍 Поиск соперника...');
+          document.getElementById('searchStatus').style.display = 'block';
+          document.getElementById('findMatchBtn').disabled = true;
+          break;
+          
         case 'matchFound':
+          console.log('⚔️ Матч найден!');
           opponentId = msg.opponent;
           opponentNick = msg.opponentNick || 'Противник';
+          stopSearching();
           startBattle();
           break;
+          
         case 'gameState':
           updateRemoteState(msg);
           break;
+          
         case 'emoji':
           displayEmoji(msg.emoji, msg.from);
           break;
+          
         case 'battleEnd':
           endBattle(msg.result, msg.winner);
           break;
@@ -460,8 +522,48 @@
     }
 
     function send(msg) {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      } else {
+        console.warn('⚠️ WebSocket не подключен');
+        connectWebSocket();
+      }
     }
+
+    // ---------- ПОИСК МАТЧА ----------
+    function startSearching() {
+      searchingMatch = true;
+      document.getElementById('searchStatus').style.display = 'block';
+      document.getElementById('findMatchBtn').disabled = true;
+      
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        send({ 
+          type: 'findMatch', 
+          nick: playerNick, 
+          cups: cups 
+        });
+      }
+    }
+    
+    function stopSearching() {
+      searchingMatch = false;
+      document.getElementById('searchStatus').style.display = 'none';
+      document.getElementById('findMatchBtn').disabled = false;
+    }
+
+    document.getElementById('findMatchBtn').onclick = () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connectWebSocket();
+        // Даем время на подключение
+        setTimeout(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            startSearching();
+          }
+        }, 500);
+      } else {
+        startSearching();
+      }
+    };
 
     // ---------- БОЙ ----------
     function startBattle() {
@@ -474,11 +576,18 @@
       matchActive = true;
       units = [];
       initTowers();
-      document.getElementById('enemyInfo').textContent = `👤 ${opponentNick} 🏆?`;
+      
+      document.getElementById('enemyInfo').textContent = `👤 ${opponentNick}`;
+      document.getElementById('timerDisplay').textContent = '2:00';
+      document.getElementById('elixirValue').textContent = '5.0';
+      document.getElementById('elixirFill').style.width = '50%';
+      
       mainMenu.classList.remove('active');
       battleScreen.classList.add('active');
       resultScreen.classList.remove('active');
+      
       renderHand();
+      
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       lastTimestamp = performance.now();
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -523,17 +632,21 @@
 
     canvas.addEventListener('click', (e) => {
       if (!matchActive || selectedCardIndex === null) return;
+      
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       const mouseX = (e.clientX - rect.left) * scaleX;
       const mouseY = (e.clientY - rect.top) * scaleY;
       
-      if (mouseY < 200 || mouseY > 360) return; // только своя половина (низ)
+      // Можно размещать только на своей половине (нижняя часть)
+      if (mouseY < 200) return;
+      
       const card = activeHand[selectedCardIndex];
       if (elixir < card.cost) return;
       
       elixir -= card.cost;
+      
       const newUnit = {
         id: Math.random().toString(36),
         type: card.id,
@@ -547,21 +660,33 @@
         target: null,
         icon: card.icon
       };
+      
       units.push(newUnit);
       cycleHand(selectedCardIndex);
-      send({ type: 'placeUnit', unit: { ...newUnit, owner: 'player' }, x: mouseX, y: mouseY });
+      
+      // Отправляем на сервер
+      send({ 
+        type: 'placeUnit', 
+        unit: newUnit, 
+        x: mouseX, 
+        y: mouseY 
+      });
     });
 
     function updateRemoteState(msg) {
       if (!matchActive) return;
+      
+      // Обновляем вражеские юниты
       if (msg.units) {
+        // Оставляем своих юнитов, заменяем вражеских
         units = units.filter(u => u.owner === 'player');
-        msg.units.forEach(ru => {
-          if (ru.owner === 'enemy') units.push(ru);
-        });
+        const enemyUnits = msg.units.filter(u => u.owner === 'enemy');
+        units.push(...enemyUnits);
       }
-      if (msg.towers) {
-        enemyTowers = msg.towers.enemy || enemyTowers;
+      
+      // Обновляем вражеские башни
+      if (msg.towers && msg.towers.enemy) {
+        enemyTowers = msg.towers.enemy;
       }
     }
 
@@ -574,6 +699,7 @@
       const panel = document.getElementById('emojiPanel');
       panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
     };
+    
     document.querySelectorAll('.emoji-item').forEach(el => {
       el.onclick = () => {
         const emoji = el.textContent;
@@ -585,11 +711,13 @@
 
     function gameLoop(ts) {
       if (!matchActive) return;
+      
       const dt = Math.min((ts - lastTimestamp) / 1000, 0.1);
       lastTimestamp = ts;
       
       // Таймер и эликсир
       gameTime -= dt;
+      
       if (gameTime <= 0) {
         if (!suddenDeath && checkMainTowersIntact()) {
           suddenDeath = true;
@@ -600,6 +728,7 @@
           return;
         }
       }
+      
       const rate = suddenDeath ? 0.7 : 0.35;
       elixir = Math.min(maxElixir, elixir + rate * dt);
       
@@ -609,7 +738,12 @@
       updateHUD();
       
       if (matchActive) {
-        send({ type: 'stateUpdate', units: units.filter(u=>u.owner==='player'), towers: { player: playerTowers } });
+        // Отправляем состояние на сервер каждые 100мс
+        send({ 
+          type: 'stateUpdate', 
+          units: units.filter(u => u.owner === 'player'), 
+          towers: { player: playerTowers } 
+        });
         animationFrameId = requestAnimationFrame(gameLoop);
       }
     }
@@ -617,18 +751,26 @@
     function updateUnits(dt) {
       units.forEach(u => {
         if (u.hp <= 0) return;
+        
         const targetTowers = u.owner === 'player' ? enemyTowers : playerTowers;
         let closest = null;
         let minDist = Infinity;
+        
         targetTowers.forEach(t => {
           if (t.hp <= 0) return;
           const dx = t.x - u.x, dy = t.y - u.y;
-          const dist = Math.sqrt(dx*dx+dy*dy);
-          if (dist < minDist) { minDist = dist; closest = t; }
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < minDist) { 
+            minDist = dist; 
+            closest = t; 
+          }
         });
+        
         if (closest) {
-          const dx = closest.x - u.x, dy = closest.y - u.y;
-          const dist = Math.sqrt(dx*dx+dy*dy);
+          const dx = closest.x - u.x;
+          const dy = closest.y - u.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          
           if (dist > 25) {
             u.x += (dx/dist) * u.speed * 60 * dt;
             u.y += (dy/dist) * u.speed * 60 * dt;
@@ -637,98 +779,158 @@
           }
         }
       });
+      
+      // Удаляем мертвых юнитов
       units = units.filter(u => u.hp > 0);
+      
+      // Удаляем уничтоженные башни из целей
+      playerTowers = playerTowers.filter(t => t.hp > 0);
+      enemyTowers = enemyTowers.filter(t => t.hp > 0);
     }
 
     function checkTowerDestruction() {
-      enemyTowers.forEach(t => { if (t.hp <= 0 && t.type === 'main') endBattle('win'); });
-      playerTowers.forEach(t => { if (t.hp <= 0 && t.type === 'main') endBattle('lose'); });
+      const playerMain = playerTowers.find(t => t.type === 'main');
+      const enemyMain = enemyTowers.find(t => t.type === 'main');
+      
+      if (enemyMain && enemyMain.hp <= 0) {
+        endBattle('win');
+      }
+      if (playerMain && playerMain.hp <= 0) {
+        endBattle('lose');
+      }
     }
 
     function checkMainTowersIntact() {
-      return enemyTowers[1].hp > 0 && playerTowers[1].hp > 0;
+      const playerMain = playerTowers.find(t => t.type === 'main');
+      const enemyMain = enemyTowers.find(t => t.type === 'main');
+      return playerMain && enemyMain && playerMain.hp > 0 && enemyMain.hp > 0;
     }
 
     function endBattleByTimeout() {
-      const playerMain = playerTowers[1].hp;
-      const enemyMain = enemyTowers[1].hp;
-      if (playerMain > enemyMain) endBattle('win');
-      else if (enemyMain > playerMain) endBattle('lose');
+      const playerMain = playerTowers.find(t => t.type === 'main');
+      const enemyMain = enemyTowers.find(t => t.type === 'main');
+      
+      if (!playerMain || !enemyMain) {
+        endBattle('draw');
+        return;
+      }
+      
+      if (playerMain.hp > enemyMain.hp) endBattle('win');
+      else if (enemyMain.hp > playerMain.hp) endBattle('lose');
       else endBattle('draw');
     }
 
     function endBattle(result, winnerId) {
+      if (!matchActive) return;
       matchActive = false;
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      
       let change = 0;
-      if (result === 'win') { cups += 30; change = 30; }
-      else if (result === 'lose') { cups = Math.max(0, cups - 25); change = -25; }
+      if (result === 'win') { 
+        cups += 30; 
+        change = 30; 
+      } else if (result === 'lose') { 
+        cups = Math.max(0, cups - 25); 
+        change = -25; 
+      }
+      
       saveProfile();
       
-      document.getElementById('resultTitle').textContent = result === 'win' ? '🏆 Победа!' : (result==='lose'?'💔 Поражение':'🤝 Ничья');
-      document.getElementById('resultCups').textContent = `${playerNick} 🏆${cups} (${change>0?'+':''}${change}) vs ${opponentNick}`;
+      document.getElementById('resultTitle').textContent = 
+        result === 'win' ? '🏆 Победа!' : 
+        (result === 'lose' ? '💔 Поражение' : '🤝 Ничья');
+      document.getElementById('resultCups').textContent = 
+        `${playerNick} 🏆${cups} (${change > 0 ? '+' : ''}${change}) vs ${opponentNick}`;
+      
       battleScreen.classList.remove('active');
       resultScreen.classList.add('active');
+      
       send({ type: 'battleEnd', result });
     }
 
     function drawCanvas() {
-      ctx.clearRect(0,0,400,380);
-      // трава
+      ctx.clearRect(0, 0, 400, 380);
+      
+      // Трава
       ctx.fillStyle = '#3a5a3a';
-      ctx.fillRect(0,0,400,380);
-      // река
+      ctx.fillRect(0, 0, 400, 380);
+      
+      // Река
       ctx.fillStyle = '#2f6f8f';
-      ctx.fillRect(0,180,400,20);
-      // башни
+      ctx.fillRect(0, 180, 400, 20);
+      
+      // Башни
       [...enemyTowers, ...playerTowers].forEach(t => {
-        if (t.hp <=0) return;
-        ctx.fillStyle = t.owner==='player' ? '#4a7db0' : '#c94b4b';
+        if (t.hp <= 0) return;
+        
+        ctx.fillStyle = t.owner === 'player' ? '#4a7db0' : '#c94b4b';
         ctx.beginPath();
-        ctx.arc(t.x, t.y, 16, 0, Math.PI*2);
+        ctx.arc(t.x, t.y, 16, 0, Math.PI * 2);
         ctx.fill();
+        
+        // HP bar
+        ctx.fillStyle = '#333';
+        ctx.fillRect(t.x - 15, t.y - 25, 30, 4);
+        ctx.fillStyle = '#2ecc71';
+        const hpPercent = t.hp / t.maxHp;
+        ctx.fillRect(t.x - 15, t.y - 25, 30 * hpPercent, 4);
+        
         ctx.fillStyle = 'white';
         ctx.font = 'bold 10px sans-serif';
-        ctx.fillText(Math.ceil(t.hp), t.x-12, t.y-14);
+        ctx.fillText(Math.ceil(t.hp), t.x - 12, t.y - 30);
+        
+        // Эмодзи над башней
         if (t.emoji) {
-          ctx.font = '20px sans-serif';
-          ctx.fillText(t.emoji.symbol, t.x-10, t.y-20);
+          ctx.font = '24px sans-serif';
+          ctx.fillText(t.emoji.symbol, t.x - 12, t.y - 40);
           t.emoji.timer -= 0.016;
-          if (t.emoji.timer <=0) t.emoji = null;
+          if (t.emoji.timer <= 0) t.emoji = null;
         }
       });
-      // юниты
+      
+      // Юниты
       units.forEach(u => {
-        ctx.fillStyle = u.owner==='player' ? '#7cb0e8' : '#e87c7c';
+        if (u.hp <= 0) return;
+        
+        ctx.fillStyle = u.owner === 'player' ? '#7cb0e8' : '#e87c7c';
         ctx.beginPath();
-        ctx.arc(u.x, u.y, 10, 0, 2*Math.PI);
+        ctx.arc(u.x, u.y, 10, 0, 2 * Math.PI);
         ctx.fill();
+        
+        // HP bar
+        ctx.fillStyle = '#333';
+        ctx.fillRect(u.x - 10, u.y - 18, 20, 3);
+        ctx.fillStyle = '#2ecc71';
+        const hpPercent = u.hp / u.maxHp;
+        ctx.fillRect(u.x - 10, u.y - 18, 20 * hpPercent, 3);
+        
         ctx.fillStyle = 'white';
-        ctx.font = '14px sans-serif';
-        ctx.fillText(u.icon || '👤', u.x-8, u.y+6);
+        ctx.font = '16px sans-serif';
+        ctx.fillText(u.icon || '👤', u.x - 8, u.y + 6);
       });
     }
 
     function updateHUD() {
-      document.getElementById('timerDisplay').textContent = `${Math.floor(gameTime/60)}:${String(Math.floor(gameTime%60)).padStart(2,'0')}`;
+      const minutes = Math.floor(gameTime / 60);
+      const seconds = Math.floor(gameTime % 60);
+      document.getElementById('timerDisplay').textContent = 
+        `${minutes}:${String(seconds).padStart(2, '0')}`;
       document.getElementById('elixirValue').textContent = elixir.toFixed(1);
-      document.getElementById('elixirFill').style.width = (elixir/maxElixir*100)+'%';
+      document.getElementById('elixirFill').style.width = (elixir / maxElixir * 100) + '%';
     }
-
-    document.getElementById('findMatchBtn').onclick = () => {
-      if (!playerId) playerId = 'p_' + Math.random().toString(36).substr(2,6);
-      connectWebSocket();
-      setTimeout(() => {
-        send({ type: 'findMatch', nick: playerNick, cups });
-      }, 400);
-    };
 
     document.getElementById('exitResultBtn').onclick = () => {
       resultScreen.classList.remove('active');
       mainMenu.classList.add('active');
       document.getElementById('cupsCount').textContent = cups;
+      stopSearching();
     };
 
+    // Инициализация
     loadProfile();
     initDeck();
     connectWebSocket();

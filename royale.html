@@ -365,7 +365,7 @@
 
 <script>
   (function() {
-    // ---------- ДАННЫЕ ЮНИТОВ (шарики разных цветов и размеров) ----------
+    // ---------- ДАННЫЕ ЮНИТОВ ----------
     const ALL_UNITS = [
       { id: 'knight', name: 'Рыцарь', cost: 3, icon: '🟦', hp: 600, dmg: 80, speed: 0.8, size: 14, color: '#4a90d9', attackSpeed: 1.2, targets: 'all' },
       { id: 'archer', name: 'Лучница', cost: 2, icon: '🟩', hp: 250, dmg: 60, speed: 0.7, size: 10, color: '#5cb85c', attackSpeed: 1.0, targets: 'all' },
@@ -379,11 +379,15 @@
       { id: 'bomber', name: 'Бомбер', cost: 2, icon: '⚫', hp: 200, dmg: 100, speed: 0.5, size: 11, color: '#2c3e50', attackSpeed: 1.6, targets: 'all' }
     ];
 
-    // Мосты
+    // Мосты для перехода через реку
     const BRIDGES = [
-      { x: 60, y: 245, width: 40, height: 60 },
-      { x: 300, y: 245, width: 40, height: 60 }
+      { x: 60, y: 245, width: 45, height: 60 },
+      { x: 295, y: 245, width: 45, height: 60 }
     ];
+
+    // РЕКА: от y=250 до y=310 (посередине карты)
+    const RIVER_TOP = 245;
+    const RIVER_BOTTOM = 305;
 
     // ---------- СОСТОЯНИЕ ----------
     let deck = [];
@@ -400,14 +404,18 @@
     let opponentNick = 'Противник';
     let opponentCups = 0;
     let cups = 0;
-    let playerTowers = [];
-    let enemyTowers = [];
+    
+    // Башни: игрок ВСЕГДА внизу, враг ВСЕГДА вверху
+    let myTowers = [];      // Башни игрока (внизу)
+    let enemyTowers = [];   // Башни врага (вверху)
     let units = [];
+    
     let playerId = null;
     let opponentId = null;
     let ws = null;
     let selectedCardIndex = null;
     let searchingMatch = false;
+    let mySide = 'bottom'; // 'bottom' или 'top' (определяется при старте матча)
 
     // DOM элементы
     const mainMenu = document.getElementById('mainMenu');
@@ -541,6 +549,8 @@
           opponentId = msg.opponent;
           opponentNick = msg.opponentNick || 'Противник';
           opponentCups = msg.opponentCups || 0;
+          mySide = msg.mySide || 'bottom'; // Сервер говорит, где мы находимся
+          console.log('⚔️ Матч найден! Моя сторона:', mySide);
           stopSearching();
           startBattle();
           break;
@@ -607,6 +617,8 @@
       suddenDeath = false;
       matchActive = true;
       units = [];
+      
+      // Инициализируем башни в зависимости от стороны
       initTowers();
       
       document.getElementById('enemyName').textContent = `👤 ${opponentNick}`;
@@ -627,12 +639,13 @@
     }
 
     function initTowers() {
-      // Квадратные башни: главная больше, боковые меньше
-      playerTowers = [
+      // Игрок ВСЕГДА внизу, враг ВСЕГДА вверху
+      myTowers = [
         { x: 60, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' },
         { x: 185, y: 490, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main', owner: 'player' },
         { x: 310, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' }
       ];
+      
       enemyTowers = [
         { x: 60, y: 50, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'enemy' },
         { x: 185, y: 15, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main', owner: 'enemy' },
@@ -664,23 +677,12 @@
       renderHand();
     }
 
-    // Проверка, находится ли точка на мосту или рядом с ним
-    function isOnBridge(x, y) {
+    // Проверка, может ли юнит пересечь реку в данной точке
+    function canCrossRiver(x, y) {
+      // Если юнит на мосту - может
       for (let bridge of BRIDGES) {
-        if (x >= bridge.x && x <= bridge.x + bridge.width &&
-            y >= bridge.y && y <= bridge.y + bridge.height) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // Проверка, может ли юнит пересечь реку
-    function canCrossRiver(unit) {
-      // Юниты могут переходить реку только по мостам
-      for (let bridge of BRIDGES) {
-        if (unit.x >= bridge.x - 10 && unit.x <= bridge.x + bridge.width + 10 &&
-            unit.y >= bridge.y - 10 && unit.y <= bridge.y + bridge.height + 10) {
+        if (x >= bridge.x - 10 && x <= bridge.x + bridge.width + 10 &&
+            y >= bridge.y - 5 && y <= bridge.y + bridge.height + 5) {
           return true;
         }
       }
@@ -696,11 +698,18 @@
       const mouseX = (e.clientX - rect.left) * scaleX;
       const mouseY = (e.clientY - rect.top) * scaleY;
       
-      // Можно размещать только на своей половине (нижняя часть, ниже реки)
-      if (mouseY < 295) return;
+      // Можно размещать только на своей половине
+      // Наша половина - нижняя (ниже реки: y > 310)
+      if (mouseY < RIVER_BOTTOM) {
+        console.log('❌ Нельзя размещать на вражеской половине!');
+        return;
+      }
       
       const card = activeHand[selectedCardIndex];
-      if (elixir < card.cost) return;
+      if (elixir < card.cost) {
+        console.log('❌ Недостаточно эликсира!');
+        return;
+      }
       
       elixir -= card.cost;
       
@@ -726,18 +735,26 @@
 
     function updateRemoteState(msg) {
       if (!matchActive) return;
+      
+      // Обновляем вражеские юниты
       if (msg.units) {
-        units = units.filter(u => u.owner === 'player');
-        const enemyUnits = msg.units.filter(u => u.owner === 'enemy').map(u => ({...u, attackTimer: u.attackTimer || 0}));
-        units.push(...enemyUnits);
+        // Оставляем только своих юнитов
+        const myUnits = units.filter(u => u.owner === 'player');
+        // Добавляем вражеские юниты (сервер присылает их с owner='enemy')
+        const enemyUnits = msg.units
+          .filter(u => u.owner === 'enemy')
+          .map(u => ({...u, attackTimer: u.attackTimer || 0}));
+        units = [...myUnits, ...enemyUnits];
       }
+      
+      // Обновляем вражеские башни
       if (msg.towers && msg.towers.enemy) {
-        enemyTowers = msg.towers.enemy.map(t => ({...t, w: t.w || 30, h: t.h || 30}));
+        enemyTowers = msg.towers.enemy.map(t => ({...t, w: t.w || 30, h: t.h || 30, owner: 'enemy'}));
       }
     }
 
     function displayEmoji(emoji, from) {
-      const tower = from === playerId ? playerTowers[1] : enemyTowers[1];
+      const tower = from === playerId ? myTowers[1] : enemyTowers[1];
       if (tower) tower.emoji = { symbol: emoji, timer: 2.0 };
     }
 
@@ -756,14 +773,15 @@
     });
 
     function findTarget(unit) {
+      // Определяем вражеские цели в зависимости от владельца юнита
       const enemies = units.filter(u => u.owner !== unit.owner && u.hp > 0);
-      const enemyTowersList = unit.owner === 'player' ? enemyTowers : playerTowers;
+      const targetTowers = unit.owner === 'player' ? enemyTowers : myTowers;
       
-      // Для юнитов с приоритетом buildings - сразу ищем башни
+      // Юниты с приоритетом "buildings" атакуют только башни
       if (unit.targets === 'buildings') {
         let closest = null;
         let minDist = Infinity;
-        enemyTowersList.forEach(t => {
+        targetTowers.forEach(t => {
           if (t.hp <= 0) return;
           const dx = t.x + t.w/2 - unit.x;
           const dy = t.y + t.h/2 - unit.y;
@@ -773,14 +791,14 @@
         return closest;
       }
       
-      // Ищем ближайшего вражеского юнита
+      // Ищем ближайшего вражеского юнита в радиусе агро
       let closestEnemy = null;
-      let minDist = Infinity;
+      let minDist = 150; // Радиус агро
       enemies.forEach(e => {
         const dx = e.x - unit.x;
         const dy = e.y - unit.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < minDist && dist < 150) { // Агро-радиус 150
+        if (dist < minDist) {
           minDist = dist;
           closestEnemy = e;
         }
@@ -788,10 +806,10 @@
       
       if (closestEnemy) return closestEnemy;
       
-      // Если врагов рядом нет - идем к башням
+      // Если врагов рядом нет - идем к ближайшей башне
       let closestTower = null;
       minDist = Infinity;
-      enemyTowersList.forEach(t => {
+      targetTowers.forEach(t => {
         if (t.hp <= 0) return;
         const dx = t.x + t.w/2 - unit.x;
         const dy = t.y + t.h/2 - unit.y;
@@ -841,17 +859,18 @@
         if (u.attackTimer > 0) u.attackTimer -= dt;
         
         const target = findTarget(u);
-        u.target = target;
         
         if (target) {
-          let targetX, targetY, targetW, targetH;
+          let targetX, targetY;
           
-          if (target.hp !== undefined && target.maxHp !== undefined) {
-            // Это юнит или башня
-            targetX = target.x || (target.x !== undefined ? target.x : 0);
-            targetY = target.y || (target.y !== undefined ? target.y : 0);
-            targetW = target.w || target.size || 20;
-            targetH = target.h || target.size || 20;
+          if (target.w !== undefined) {
+            // Это башня (имеет w и h)
+            targetX = target.x + target.w/2;
+            targetY = target.y + target.h/2;
+          } else {
+            // Это юнит (имеет x и y)
+            targetX = target.x;
+            targetY = target.y;
           }
           
           const dx = targetX - u.x;
@@ -864,71 +883,88 @@
             let newX = u.x + (dx/dist) * u.speed * 60 * dt;
             let newY = u.y + (dy/dist) * u.speed * 60 * dt;
             
-            // Проверка реки (y=250 до y=310)
-            const crossingRiver = (u.y < 280 && newY > 280) || (u.y > 280 && newY < 280);
-            if (crossingRiver && !canCrossRiver(u)) {
-              // Не может перейти реку, ищем ближайший мост
-              let closestBridge = null;
-              let minBridgeDist = Infinity;
-              for (let bridge of BRIDGES) {
-                const bx = bridge.x + bridge.width/2;
-                const by = bridge.y + bridge.height/2;
-                const bdist = Math.sqrt((bx-u.x)**2 + (by-u.y)**2);
-                if (bdist < minBridgeDist) {
-                  minBridgeDist = bdist;
-                  closestBridge = {x: bx, y: by};
+            // Проверка: пытается ли юнит пересечь реку НЕ по мосту
+            const wasAboveRiver = u.y < RIVER_TOP;
+            const willBeBelowRiver = newY > RIVER_BOTTOM;
+            const wasBelowRiver = u.y > RIVER_BOTTOM;
+            const willBeAboveRiver = newY < RIVER_TOP;
+            
+            if ((wasAboveRiver && willBeBelowRiver) || (wasBelowRiver && willBeAboveRiver)) {
+              // Пытается пересечь реку - проверяем, на мосту ли он
+              if (!canCrossRiver(u.x, u.y)) {
+                // Не на мосту - ищем ближайший мост
+                let closestBridge = null;
+                let minBridgeDist = Infinity;
+                for (let bridge of BRIDGES) {
+                  const bx = bridge.x + bridge.width/2;
+                  const by = bridge.y + bridge.height/2;
+                  const bdist = Math.sqrt((bx-u.x)**2 + (by-u.y)**2);
+                  if (bdist < minBridgeDist) {
+                    minBridgeDist = bdist;
+                    closestBridge = {x: bx, y: by};
+                  }
                 }
-              }
-              if (closestBridge) {
-                const bdx = closestBridge.x - u.x;
-                const bdy = closestBridge.y - u.y;
-                const bdist2 = Math.sqrt(bdx*bdx + bdy*bdy);
-                newX = u.x + (bdx/bdist2) * u.speed * 60 * dt;
-                newY = u.y + (bdy/bdist2) * u.speed * 60 * dt;
+                if (closestBridge) {
+                  const bdx = closestBridge.x - u.x;
+                  const bdy = closestBridge.y - u.y;
+                  const bdist2 = Math.sqrt(bdx*bdx + bdy*bdy);
+                  if (bdist2 > 0) {
+                    newX = u.x + (bdx/bdist2) * u.speed * 60 * dt;
+                    newY = u.y + (bdy/bdist2) * u.speed * 60 * dt;
+                  }
+                }
               }
             }
             
             u.x = newX;
             u.y = newY;
           } else if (u.attackTimer <= 0) {
-            // Атака с задержкой
+            // АТАКА С ЗАДЕРЖКОЙ
             target.hp -= u.dmg;
             u.attackTimer = u.attackSpeed;
+            console.log(`⚔️ ${u.icon} атакует! Урон: ${u.dmg}, HP цели: ${Math.ceil(target.hp)}`);
           }
         }
       });
       
-      // Удаляем мертвых
+      // Удаляем мертвых юнитов
       units = units.filter(u => u.hp > 0);
-      playerTowers = playerTowers.filter(t => t.hp > 0);
+      // Удаляем разрушенные башни
+      myTowers = myTowers.filter(t => t.hp > 0);
       enemyTowers = enemyTowers.filter(t => t.hp > 0);
       
-      // Отправляем состояние
-      if (Math.random() < 0.1) { // ~6 раз в секунду при 60fps
+      // Отправляем состояние на сервер
+      if (Math.random() < 0.15) {
         send({ 
           type: 'stateUpdate', 
           units: units.filter(u => u.owner === 'player'), 
-          towers: { player: playerTowers } 
+          towers: { player: myTowers } 
         });
       }
     }
 
     function checkTowerDestruction() {
-      const playerMain = playerTowers.find(t => t.type === 'main');
+      const playerMain = myTowers.find(t => t.type === 'main');
       const enemyMain = enemyTowers.find(t => t.type === 'main');
       
-      if (enemyMain && enemyMain.hp <= 0) endBattle('win');
-      if (playerMain && playerMain.hp <= 0) endBattle('lose');
+      if (enemyMain && enemyMain.hp <= 0) {
+        console.log('🏆 Главная башня врага уничтожена!');
+        endBattle('win');
+      }
+      if (playerMain && playerMain.hp <= 0) {
+        console.log('💔 Наша главная башня уничтожена!');
+        endBattle('lose');
+      }
     }
 
     function checkMainTowersIntact() {
-      const playerMain = playerTowers.find(t => t.type === 'main');
+      const playerMain = myTowers.find(t => t.type === 'main');
       const enemyMain = enemyTowers.find(t => t.type === 'main');
       return playerMain && enemyMain && playerMain.hp > 0 && enemyMain.hp > 0;
     }
 
     function endBattleByTimeout() {
-      const playerMain = playerTowers.find(t => t.type === 'main');
+      const playerMain = myTowers.find(t => t.type === 'main');
       const enemyMain = enemyTowers.find(t => t.type === 'main');
       
       if (!playerMain || !enemyMain) { endBattle('draw'); return; }
@@ -964,21 +1000,39 @@
     function drawCanvas() {
       ctx.clearRect(0, 0, 400, 550);
       
-      // Трава
-      ctx.fillStyle = '#3a5a3a';
-      ctx.fillRect(0, 0, 400, 550);
+      // Трава (верхняя половина - враг, нижняя - игрок)
+      ctx.fillStyle = '#4a3a3a'; // Красноватая трава для врага
+      ctx.fillRect(0, 0, 400, 245);
       
-      // Река (широкая, с мостами)
+      ctx.fillStyle = '#3a5a3a'; // Зеленая трава для игрока
+      ctx.fillRect(0, 305, 400, 245);
+      
+      // Река
       ctx.fillStyle = '#2f6f8f';
-      ctx.fillRect(0, 250, 400, 60);
+      ctx.fillRect(0, 245, 400, 60);
+      
+      // Волны на реке
+      ctx.strokeStyle = '#5a9fbf';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 400; i += 30) {
+        ctx.beginPath();
+        ctx.moveTo(i, 255);
+        ctx.quadraticCurveTo(i+15, 260, i+30, 255);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(i, 285);
+        ctx.quadraticCurveTo(i+15, 290, i+30, 285);
+        ctx.stroke();
+      }
       
       // Мосты
-      ctx.fillStyle = '#8b6914';
       BRIDGES.forEach(bridge => {
+        ctx.fillStyle = '#8b6914';
         ctx.fillRect(bridge.x, bridge.y, bridge.width, bridge.height);
-        // Текстура моста
         ctx.strokeStyle = '#5c4a1e';
         ctx.lineWidth = 2;
+        ctx.strokeRect(bridge.x, bridge.y, bridge.width, bridge.height);
+        // Доски моста
         for (let i = 0; i < bridge.height; i += 8) {
           ctx.beginPath();
           ctx.moveTo(bridge.x, bridge.y + i);
@@ -987,21 +1041,16 @@
         }
       });
       
-      // Башни (квадратные)
-      [...enemyTowers, ...playerTowers].forEach(t => {
+      // Рисуем башни врага (сверху)
+      enemyTowers.forEach(t => {
         if (t.hp <= 0) return;
         
-        // Тень
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(t.x + 2, t.y + 2, t.w, t.h);
-        
-        // Башня
-        ctx.fillStyle = t.owner === 'player' ? '#4a7db0' : '#c94b4b';
+        ctx.fillStyle = '#c94b4b';
         ctx.fillRect(t.x, t.y, t.w, t.h);
         
-        // Зубцы на главной башне
+        // Зубцы для главной башни
         if (t.type === 'main') {
-          ctx.fillStyle = t.owner === 'player' ? '#5a8dc0' : '#d95b5b';
+          ctx.fillStyle = '#d95b5b';
           for (let i = 0; i < 5; i++) {
             ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
           }
@@ -1009,24 +1058,57 @@
         
         // HP bar
         ctx.fillStyle = '#333';
-        ctx.fillRect(t.x - 2, t.y - 16, t.w + 4, 6);
-        ctx.fillStyle = '#2ecc71';
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, t.w + 4, 6);
+        ctx.fillStyle = '#e74c3c';
         const hpPercent = t.hp / t.maxHp;
-        ctx.fillRect(t.x - 2, t.y - 16, (t.w + 4) * hpPercent, 6);
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * hpPercent, 6);
         
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillText(Math.ceil(t.hp), t.x + t.w/2 - 12, t.y - 20);
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText(Math.ceil(t.hp), t.x + t.w/2 - 10, t.y + t.h + 14);
         
         if (t.emoji) {
           ctx.font = '22px sans-serif';
-          ctx.fillText(t.emoji.symbol, t.x + t.w/2 - 11, t.y - 28);
+          ctx.fillText(t.emoji.symbol, t.x + t.w/2 - 11, t.y - 10);
           t.emoji.timer -= 0.016;
           if (t.emoji.timer <= 0) t.emoji = null;
         }
       });
       
-      // Юниты (шарики)
+      // Рисуем башни игрока (снизу)
+      myTowers.forEach(t => {
+        if (t.hp <= 0) return;
+        
+        ctx.fillStyle = '#4a7db0';
+        ctx.fillRect(t.x, t.y, t.w, t.h);
+        
+        if (t.type === 'main') {
+          ctx.fillStyle = '#5a8dc0';
+          for (let i = 0; i < 5; i++) {
+            ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
+          }
+        }
+        
+        // HP bar
+        ctx.fillStyle = '#333';
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, t.w + 4, 6);
+        ctx.fillStyle = '#2ecc71';
+        const hpPercent = t.hp / t.maxHp;
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * hpPercent, 6);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText(Math.ceil(t.hp), t.x + t.w/2 - 10, t.y + t.h + 14);
+        
+        if (t.emoji) {
+          ctx.font = '22px sans-serif';
+          ctx.fillText(t.emoji.symbol, t.x + t.w/2 - 11, t.y - 10);
+          t.emoji.timer -= 0.016;
+          if (t.emoji.timer <= 0) t.emoji = null;
+        }
+      });
+      
+      // Рисуем юнитов
       units.forEach(u => {
         if (u.hp <= 0) return;
         
@@ -1037,24 +1119,24 @@
         ctx.fill();
         
         // Шарик
-        ctx.fillStyle = u.color;
+        ctx.fillStyle = u.owner === 'player' ? '#7cb0e8' : '#e87c7c';
         ctx.beginPath();
         ctx.arc(u.x, u.y, u.size, 0, 2 * Math.PI);
         ctx.fill();
         
         // Обводка
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.lineWidth = 2;
         ctx.stroke();
         
         // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(u.x - u.size, u.y - u.size - 10, u.size * 2, 4);
-        ctx.fillStyle = '#2ecc71';
+        ctx.fillStyle = u.owner === 'player' ? '#3498db' : '#e74c3c';
         const hpPercent = u.hp / u.maxHp;
         ctx.fillRect(u.x - u.size, u.y - u.size - 10, u.size * 2 * hpPercent, 4);
         
-        // Иконка внутри шарика
+        // Иконка
         ctx.fillStyle = 'white';
         ctx.font = `${u.size}px sans-serif`;
         ctx.fillText(u.icon, u.x - u.size/2, u.y + u.size/3);

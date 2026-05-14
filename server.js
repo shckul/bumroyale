@@ -1,147 +1,91 @@
-const WebSocket = require('ws');
+const express = require('express');
+const path = require('path');
 const http = require('http');
+const { Server } = require('ws');
 
-const server = http.createServer();
-const wss = new WebSocket.Server({ server });
+const app = express();
+const PORT = process.env.PORT || 8080;
 
-// Константы игры для синхронизации
-const TICK_RATE = 20; // 20 обновлений в секунду (каждые 50мс)
-const GAME_DURATION = 120; // 2 минуты
-const TOWER_MAX_HP = 1000;
+// 1. Раздача фронтенда
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'royale.html'));
+});
 
-let waitingPlayer = null;
-let rooms = new Map();
+// 2. Создание сервера
+const server = http.createServer(app);
+const wss = new Server({ server });
+
+let lobby = null;
+
+console.log(`[SERVER] Запуск на порту ${PORT}`);
 
 wss.on('connection', (ws) => {
-    console.log('Новое подключение');
+    console.log('Новый игрок подключился');
 
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
+        try {
+            const data = JSON.parse(message);
 
-        switch (data.type) {
-            case 'MATCHMAKING':
-                handleMatchmaking(ws, data);
-                break;
-            case 'SPAWN':
-                handleSpawn(ws, data);
-                break;
-            case 'EMOJI':
-                handleEmoji(ws, data);
-                break;
+            if (data.type === 'join') {
+                ws.userData = {
+                    name: data.name || 'Игрок',
+                    trophies: data.trophies || 0
+                };
+
+                if (lobby && lobby !== ws && lobby.readyState === 1) {
+                    const p1 = lobby;
+                    const p2 = ws;
+
+                    p1.opponent = p2;
+                    p2.opponent = p1;
+
+                    p1.send(JSON.stringify({
+                        type: 'match_found',
+                        side: 'bottom',
+                        oppName: p2.userData.name,
+                        oppTrophies: p2.userData.trophies
+                    }));
+
+                    p2.send(JSON.stringify({
+                        type: 'match_found',
+                        side: 'top',
+                        oppName: p1.userData.name,
+                        oppTrophies: p1.userData.trophies
+                    }));
+
+                    console.log(`МАТЧ: ${p1.userData.name} vs ${p2.userData.name}`);
+                    lobby = null;
+                } else {
+                    lobby = ws;
+                    console.log(`ОЖИДАНИЕ: ${ws.userData.name} ищет игру`);
+                }
+            }
+
+            if (data.type === 'spawn' || data.type === 'emoji') {
+                if (ws.opponent && ws.opponent.readyState === 1) {
+                    ws.opponent.send(JSON.stringify(data));
+                }
+            }
+        } catch (err) {
+            console.error('Ошибка обработки сообщения:', err);
         }
     });
 
     ws.on('close', () => {
-        if (waitingPlayer && waitingPlayer.ws === ws) {
-            waitingPlayer = null;
-        }
-        // Логика завершения комнаты при дисконнекте
-        rooms.forEach((room, roomId) => {
-            if (room.p1.ws === ws || room.p2.ws === ws) {
-                const winner = room.p1.ws === ws ? room.p2 : room.p1;
-                winner.ws.send(JSON.stringify({ type: 'GAME_END', won: true }));
-                rooms.delete(roomId);
+        if (lobby === ws) lobby = null;
+        if (ws.opponent) {
+            if (ws.opponent.readyState === 1) {
+                ws.opponent.send(JSON.stringify({ 
+                    type: 'opponent_left', 
+                    reason: 'Противник покинул игру' 
+                }));
             }
-        });
+            ws.opponent.opponent = null;
+        }
+        console.log('Игрок отключился');
     });
 });
 
-function handleMatchmaking(ws, data) {
-    if (!waitingPlayer) {
-        waitingPlayer = { ws, user: data.user, deck: data.deck, trophies: 1000 };
-    } else {
-        const roomId = `room_${Date.now()}`;
-        const room = {
-            id: roomId,
-            p1: waitingPlayer,
-            p2: { ws, user: data.user, deck: data.deck, trophies: 1000 },
-            state: {
-                timer: GAME_DURATION,
-                isOvertime: false,
-                units: [],
-                towers: {
-                    p1: [TOWER_MAX_HP, TOWER_MAX_HP, TOWER_MAX_HP],
-                    p2: [TOWER_MAX_HP, TOWER_MAX_HP, TOWER_MAX_HP]
-                }
-            }
-        };
-
-        rooms.set(roomId, room);
-        ws.roomId = roomId;
-        room.p1.ws.roomId = roomId;
-
-        // Уведомляем обоих о начале
-        const startMsg = (player, opponent) => JSON.stringify({
-            type: 'START_BATTLE',
-            opponent: { name: opponent.user, trophies: opponent.trophies }
-        });
-
-        room.p1.ws.send(startMsg(room.p1, room.p2));
-        room.p2.ws.send(startMsg(room.p2, room.p1));
-
-        waitingPlayer = null;
-        startGameLoop(roomId);
-    }
-}
-
-function handleSpawn(ws, data) {
-    const room = rooms.get(ws.roomId);
-    if (!room) return;
-
-    // Серверная валидация: инвертируем Y для оппонента
-    const isP1 = room.p1.ws === ws;
-    const unit = {
-        id: Date.now(),
-        owner: isP1 ? 'p1' : 'p2',
-        unitId: data.unitId,
-        x: data.x,
-        y: isP1 ? data.y : 1 - data.y, // Отражаем поле для врага
-        hp: 100 // Взять из конфига юнита
-    };
-    
-    room.state.units.push(unit);
-}
-
-function handleEmoji(ws, data) {
-    const room = rooms.get(ws.roomId);
-    if (!room) return;
-
-    const opponent = room.p1.ws === ws ? room.p2 : room.p1;
-    opponent.ws.send(JSON.stringify({ type: 'ENEMY_EMOJI', char: data.char }));
-}
-
-/**
- * ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ СЕРВЕРА
- */
-function startGameLoop(roomId) {
-    const interval = setInterval(() => {
-        const room = rooms.get(roomId);
-        if (!room) return clearInterval(interval);
-
-        // 1. Обновление позиций юнитов (простейший AI)
-        room.state.units.forEach(unit => {
-            const direction = unit.owner === 'p1' ? -0.005 : 0.005;
-            unit.y += direction; // Юниты просто идут вперед
-        });
-
-        // 2. Проверка коллизий и здоровья башен (заглушка логики)
-        // Здесь должен быть расчет расстояния до ближайшей башни
-
-        // 3. Рассылка состояния (State Sync)
-        const statePayload = JSON.stringify({
-            type: 'STATE_UPDATE',
-            units: room.state.units,
-            towers: room.state.towers,
-            timer: room.state.timer
-        });
-
-        room.p1.ws.send(statePayload);
-        room.p2.ws.send(statePayload);
-
-    }, TICK_RATE);
-}
-
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`[SERVER] Готов к работе на порту ${PORT}`);
 });

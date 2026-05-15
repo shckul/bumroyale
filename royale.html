@@ -5,300 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>👑 Royale Clone</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-    }
-    body {
-      background: #1a1e2b;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-    }
-    #game-container {
-      width: 100%;
-      max-width: 420px;
-      height: 100vh;
-      max-height: 900px;
-      background: linear-gradient(145deg, #2a2f3f, #1f2230);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      position: relative;
-    }
-    .screen {
-      display: none;
-      flex-direction: column;
-      height: 100%;
-      width: 100%;
-      padding: 10px;
-      color: #f0e6d2;
-    }
-    .screen.active {
-      display: flex;
-    }
-    .main-menu {
-      gap: 10px;
-      justify-content: flex-end;
-    }
-    .menu-bottom {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: auto;
-      padding-bottom: 20px;
-    }
-    .tabs {
-      display: flex;
-      gap: 8px;
-      background: #232837;
-      padding: 6px;
-      border-radius: 24px;
-      margin-bottom: 10px;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 12px 5px;
-      background: transparent;
-      border: none;
-      color: #9aa0b4;
-      font-weight: bold;
-      border-radius: 20px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-    .tab-btn.active {
-      background: #4f5b72;
-      color: white;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    }
-    .panel {
-      background: #232837;
-      border-radius: 20px;
-      padding: 14px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow-y: auto;
-      margin-bottom: 10px;
-    }
-    .unit-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
-    }
-    .unit-card {
-      background: #2f354a;
-      border-radius: 10px;
-      padding: 6px;
-      text-align: center;
-      font-size: 11px;
-      border: 2px solid transparent;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-    .unit-card.selected {
-      border-color: #f7c948;
-      background: #4a432f;
-    }
-    .unit-icon {
-      font-size: 24px;
-      display: block;
-    }
-    .queue-preview {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      font-size: 12px;
-      background: #2a2f40;
-      padding: 8px;
-      border-radius: 12px;
-    }
-    .fight-btn {
-      background: #e85d3a;
-      border: none;
-      color: white;
-      font-weight: bold;
-      padding: 20px;
-      border-radius: 20px;
-      font-size: 24px;
-      letter-spacing: 2px;
-      cursor: pointer;
-      box-shadow: 0 6px 0 #8f2e1c;
-      transition: 0.1s linear;
-      width: 100%;
-    }
-    .fight-btn:active {
-      transform: translateY(3px);
-      box-shadow: 0 2px 0 #8f2e1c;
-    }
-    .fight-btn:disabled {
-      background: #666;
-      box-shadow: 0 6px 0 #444;
-      cursor: not-allowed;
-    }
-    .search-status {
-      color: #f7c948;
-      text-align: center;
-      font-size: 18px;
-      display: none;
-      animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    .profile-input {
-      background: #2f354a;
-      border: none;
-      padding: 14px;
-      border-radius: 16px;
-      color: white;
-      font-size: 16px;
-      outline: none;
-    }
-    .cups-display {
-      font-size: 32px;
-      font-weight: bold;
-      color: #f7c948;
-      text-align: center;
-    }
-    .battle-hud {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 8px;
-      font-weight: bold;
-      font-size: 13px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 10px;
-      margin-bottom: 5px;
-    }
-    .enemy-info {
-      display: flex;
-      flex-direction: column;
-    }
-    .timer {
-      background: #1e212b;
-      padding: 6px 16px;
-      border-radius: 15px;
-      font-size: 16px;
-      color: #ffd966;
-    }
-    canvas {
-      width: 100%;
-      border-radius: 12px;
-      background: #2b4a3b;
-      display: block;
-      box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-      flex: 1;
-    }
-    .bottom-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-top: 5px;
-      background: rgba(0,0,0,0.4);
-      border-radius: 16px;
-      padding: 8px;
-    }
-    .elixir-bar-container {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .elixir-fill {
-      height: 12px;
-      background: linear-gradient(90deg, #8b2fc9, #c24eff);
-      border-radius: 8px;
-      width: 0%;
-      box-shadow: 0 0 10px #c24eff;
-      transition: width 0.1s;
-    }
-    .elixir-bg {
-      flex: 1;
-      background: #2a2f3f;
-      height: 12px;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .elixir-number {
-      font-weight: bold;
-      color: #eac4ff;
-      min-width: 40px;
-      font-size: 16px;
-    }
-    .hand-cards {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-    }
-    .card-slot {
-      background: #2d3245;
-      border-radius: 12px;
-      padding: 8px;
-      text-align: center;
-      flex: 1;
-      max-width: 70px;
-      border: 2px solid #5a5f72;
-      transition: 0.2s;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .card-slot.highlight {
-      border-color: #f7c948;
-      box-shadow: 0 0 15px gold;
-      transform: scale(1.05);
-    }
-    .emoji-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .emoji-btn {
-      background: #3b4055;
-      border: none;
-      font-size: 22px;
-      border-radius: 12px;
-      padding: 6px 12px;
-      cursor: pointer;
-    }
-    .emoji-panel {
-      display: none;
-      gap: 8px;
-      background: #1f2330;
-      padding: 10px;
-      border-radius: 20px;
-      position: absolute;
-      bottom: 160px;
-      right: 10px;
-      z-index: 20;
-    }
-    .emoji-item {
-      font-size: 28px;
-      cursor: pointer;
-      padding: 4px;
-    }
-    .result-screen {
-      justify-content: center;
-      align-items: center;
-      gap: 20px;
-      text-align: center;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #1a1e2b; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 0; }
+    #game-container { width: 100%; max-width: 420px; height: 100vh; max-height: 900px; background: linear-gradient(145deg, #2a2f3f, #1f2230); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .screen { display: none; flex-direction: column; height: 100%; width: 100%; padding: 10px; color: #f0e6d2; }
+    .screen.active { display: flex; }
+    .main-menu { gap: 10px; justify-content: flex-end; }
+    .menu-bottom { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-bottom: 20px; }
+    .tabs { display: flex; gap: 8px; background: #232837; padding: 6px; border-radius: 24px; margin-bottom: 10px; }
+    .tab-btn { flex: 1; padding: 12px 5px; background: transparent; border: none; color: #9aa0b4; font-weight: bold; border-radius: 20px; font-size: 16px; cursor: pointer; transition: 0.2s; }
+    .tab-btn.active { background: #4f5b72; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+    .panel { background: #232837; border-radius: 20px; padding: 14px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; margin-bottom: 10px; }
+    .unit-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .unit-card { background: #2f354a; border-radius: 10px; padding: 6px; text-align: center; font-size: 11px; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
+    .unit-card.selected { border-color: #f7c948; background: #4a432f; }
+    .unit-icon { font-size: 24px; display: block; }
+    .queue-preview { display: flex; gap: 8px; align-items: center; font-size: 12px; background: #2a2f40; padding: 8px; border-radius: 12px; }
+    .fight-btn { background: #e85d3a; border: none; color: white; font-weight: bold; padding: 20px; border-radius: 20px; font-size: 24px; letter-spacing: 2px; cursor: pointer; box-shadow: 0 6px 0 #8f2e1c; transition: 0.1s linear; width: 100%; }
+    .fight-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #8f2e1c; }
+    .fight-btn:disabled { background: #666; box-shadow: 0 6px 0 #444; cursor: not-allowed; }
+    .search-status { color: #f7c948; text-align: center; font-size: 18px; display: none; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .profile-input { background: #2f354a; border: none; padding: 14px; border-radius: 16px; color: white; font-size: 16px; outline: none; }
+    .cups-display { font-size: 32px; font-weight: bold; color: #f7c948; text-align: center; }
+    .battle-hud { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; font-weight: bold; font-size: 13px; background: rgba(0,0,0,0.3); border-radius: 10px; margin-bottom: 5px; }
+    .enemy-info { display: flex; flex-direction: column; }
+    .timer { background: #1e212b; padding: 6px 16px; border-radius: 15px; font-size: 16px; color: #ffd966; }
+    canvas { width: 100%; border-radius: 12px; background: #2b4a3b; display: block; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); flex: 1; }
+    .bottom-panel { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; background: rgba(0,0,0,0.4); border-radius: 16px; padding: 8px; }
+    .elixir-bar-container { display: flex; align-items: center; gap: 8px; }
+    .elixir-fill { height: 12px; background: linear-gradient(90deg, #8b2fc9, #c24eff); border-radius: 8px; width: 0%; box-shadow: 0 0 10px #c24eff; transition: width 0.1s; }
+    .elixir-bg { flex: 1; background: #2a2f3f; height: 12px; border-radius: 8px; overflow: hidden; }
+    .elixir-number { font-weight: bold; color: #eac4ff; min-width: 40px; font-size: 16px; }
+    .hand-cards { display: flex; gap: 8px; justify-content: center; }
+    .card-slot { background: #2d3245; border-radius: 12px; padding: 8px; text-align: center; flex: 1; max-width: 70px; border: 2px solid #5a5f72; transition: 0.2s; cursor: pointer; font-size: 13px; }
+    .card-slot.highlight { border-color: #f7c948; box-shadow: 0 0 15px gold; transform: scale(1.05); }
+    .emoji-row { display: flex; justify-content: space-between; align-items: center; }
+    .emoji-btn { background: #3b4055; border: none; font-size: 22px; border-radius: 12px; padding: 6px 12px; cursor: pointer; }
+    .emoji-panel { display: none; gap: 8px; background: #1f2330; padding: 10px; border-radius: 20px; position: absolute; bottom: 160px; right: 10px; z-index: 20; }
+    .emoji-item { font-size: 28px; cursor: pointer; padding: 4px; }
+    .result-screen { justify-content: center; align-items: center; gap: 20px; text-align: center; }
   </style>
 </head>
 <body>
 <div id="game-container">
-  <!-- Главное меню -->
   <div id="mainMenu" class="screen active main-menu">
     <div class="panel" id="menuContent">
       <div id="tabBattle" class="panel-content">
@@ -328,7 +78,6 @@
     </div>
   </div>
 
-  <!-- Экран боя -->
   <div id="battleScreen" class="screen" style="padding:5px; gap: 0;">
     <div class="battle-hud">
       <div class="enemy-info">
@@ -355,7 +104,6 @@
     </div>
   </div>
 
-  <!-- Экран результата -->
   <div id="resultScreen" class="screen result-screen">
     <h2 id="resultTitle" style="font-size:36px;"></h2>
     <p id="resultCups" style="font-size:18px;"></p>
@@ -364,8 +112,7 @@
 </div>
 
 <script>
-  (function() {
-    // ---------- ДАННЫЕ ЮНИТОВ ----------
+(function() {
     const ALL_UNITS = [
       { id: 'knight', name: 'Рыцарь', cost: 3, icon: '🟦', hp: 600, dmg: 80, speed: 0.8, size: 14, color: '#4a90d9', attackSpeed: 1.2, targets: 'all' },
       { id: 'archer', name: 'Лучница', cost: 2, icon: '🟩', hp: 250, dmg: 60, speed: 0.7, size: 10, color: '#5cb85c', attackSpeed: 1.0, targets: 'all' },
@@ -379,17 +126,14 @@
       { id: 'bomber', name: 'Бомбер', cost: 2, icon: '⚫', hp: 200, dmg: 100, speed: 0.5, size: 11, color: '#2c3e50', attackSpeed: 1.6, targets: 'all' }
     ];
 
-    // Мосты для перехода через реку
+    // Мосты и река
     const BRIDGES = [
-      { x: 60, y: 245, width: 45, height: 60 },
-      { x: 295, y: 245, width: 45, height: 60 }
+      { x: 55, y: 245, width: 50, height: 60 },
+      { x: 295, y: 245, width: 50, height: 60 }
     ];
-
-    // РЕКА: от y=250 до y=310 (посередине карты)
     const RIVER_TOP = 245;
     const RIVER_BOTTOM = 305;
 
-    // ---------- СОСТОЯНИЕ ----------
     let deck = [];
     let battleDeck = [];
     let activeHand = [];
@@ -404,20 +148,17 @@
     let opponentNick = 'Противник';
     let opponentCups = 0;
     let cups = 0;
-    
-    // Башни: игрок ВСЕГДА внизу, враг ВСЕГДА вверху
-    let myTowers = [];      // Башни игрока (внизу)
-    let enemyTowers = [];   // Башни врага (вверху)
-    let units = [];
-    
+    let myTowers = [];
+    let enemyTowers = [];
+    let myUnits = [];
+    let enemyUnits = [];
     let playerId = null;
     let opponentId = null;
     let ws = null;
     let selectedCardIndex = null;
     let searchingMatch = false;
-    let mySide = 'bottom'; // 'bottom' или 'top' (определяется при старте матча)
+    let lastStateUpdate = 0;
 
-    // DOM элементы
     const mainMenu = document.getElementById('mainMenu');
     const battleScreen = document.getElementById('battleScreen');
     const resultScreen = document.getElementById('resultScreen');
@@ -426,7 +167,7 @@
     let animationFrameId = null;
     let lastTimestamp = 0;
 
-    // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+    // Инициализация
     function loadProfile() {
       playerNick = localStorage.getItem('royaleNick') || 'Игрок';
       cups = parseInt(localStorage.getItem('royaleCups') || '0');
@@ -476,7 +217,6 @@
       preview.innerHTML = `<span>⏳ Очередь: ${queueUnit.icon} ${queueUnit.name} (💰${queueUnit.cost})</span>`;
     }
 
-    // ---------- ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ----------
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -493,12 +233,11 @@
       document.getElementById('cupsCount').textContent = cups;
     };
 
-    // ---------- WEBSOCKET ----------
+    // WebSocket
     function connectWebSocket() {
       if (ws && ws.readyState === WebSocket.OPEN) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      console.log('🔌 Подключение к WebSocket:', `${protocol}//${host}`);
       
       try {
         ws = new WebSocket(`${protocol}//${host}`);
@@ -520,22 +259,16 @@
             const msg = JSON.parse(e.data);
             handleMessage(msg);
           } catch (error) {
-            console.error('Ошибка обработки сообщения:', error);
+            console.error('Ошибка:', error);
           }
         };
         
-        ws.onerror = (error) => {
-          console.error('❌ Ошибка WebSocket:', error);
-          stopSearching();
-        };
-        
+        ws.onerror = () => stopSearching();
         ws.onclose = () => {
-          console.log('🔌 WebSocket отключен');
           stopSearching();
           setTimeout(connectWebSocket, 2000);
         };
       } catch (error) {
-        console.error('Ошибка создания WebSocket:', error);
         setTimeout(connectWebSocket, 3000);
       }
     }
@@ -549,19 +282,24 @@
           opponentId = msg.opponent;
           opponentNick = msg.opponentNick || 'Противник';
           opponentCups = msg.opponentCups || 0;
-          mySide = msg.mySide || 'bottom'; // Сервер говорит, где мы находимся
-          console.log('⚔️ Матч найден! Моя сторона:', mySide);
           stopSearching();
           startBattle();
           break;
         case 'gameState':
-          updateRemoteState(msg);
+          // Обновляем вражеские юниты и башни
+          if (msg.enemyUnits) {
+            enemyUnits = msg.enemyUnits.map(u => ({...u, attackTimer: u.attackTimer || 0}));
+          }
+          if (msg.towers) {
+            if (msg.towers.player) myTowers = msg.towers.player;
+            if (msg.towers.enemy) enemyTowers = msg.towers.enemy;
+          }
           break;
         case 'emoji':
           displayEmoji(msg.emoji, msg.from);
           break;
         case 'battleEnd':
-          endBattle(msg.result, msg.winner);
+          endBattle(msg.result);
           break;
       }
     }
@@ -569,26 +307,16 @@
     function send(msg) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(msg));
-      } else {
-        connectWebSocket();
-        setTimeout(() => {
-          if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-        }, 500);
       }
     }
 
-    // ---------- ПОИСК МАТЧА ----------
+    // Поиск матча
     function startSearching() {
       searchingMatch = true;
       document.getElementById('searchStatus').style.display = 'block';
       document.getElementById('findMatchBtn').disabled = true;
       if (ws && ws.readyState === WebSocket.OPEN) {
         send({ type: 'findMatch', nick: playerNick, cups: cups });
-      } else {
-        connectWebSocket();
-        setTimeout(() => {
-          if (ws && ws.readyState === WebSocket.OPEN) send({ type: 'findMatch', nick: playerNick, cups: cups });
-        }, 1000);
       }
     }
     
@@ -607,7 +335,7 @@
       }
     };
 
-    // ---------- БОЙ ----------
+    // Бой
     function startBattle() {
       battleDeck = [...deck];
       activeHand = battleDeck.slice(0,4).map(idx => ({...ALL_UNITS[idx], attackTimer: 0}));
@@ -616,9 +344,10 @@
       gameTime = 120;
       suddenDeath = false;
       matchActive = true;
-      units = [];
+      myUnits = [];
+      enemyUnits = [];
+      lastStateUpdate = Date.now();
       
-      // Инициализируем башни в зависимости от стороны
       initTowers();
       
       document.getElementById('enemyName').textContent = `👤 ${opponentNick}`;
@@ -639,7 +368,6 @@
     }
 
     function initTowers() {
-      // Игрок ВСЕГДА внизу, враг ВСЕГДА вверху
       myTowers = [
         { x: 60, y: 470, w: 30, h: 30, hp: 800, maxHp: 800, type: 'side', owner: 'player' },
         { x: 185, y: 490, w: 45, h: 45, hp: 1500, maxHp: 1500, type: 'main', owner: 'player' },
@@ -677,11 +405,10 @@
       renderHand();
     }
 
-    // Проверка, может ли юнит пересечь реку в данной точке
-    function canCrossRiver(x, y) {
-      // Если юнит на мосту - может
+    // Проверка на мосту
+    function isOnBridge(x, y) {
       for (let bridge of BRIDGES) {
-        if (x >= bridge.x - 10 && x <= bridge.x + bridge.width + 10 &&
+        if (x >= bridge.x - 15 && x <= bridge.x + bridge.width + 15 &&
             y >= bridge.y - 5 && y <= bridge.y + bridge.height + 5) {
           return true;
         }
@@ -698,18 +425,11 @@
       const mouseX = (e.clientX - rect.left) * scaleX;
       const mouseY = (e.clientY - rect.top) * scaleY;
       
-      // Можно размещать только на своей половине
-      // Наша половина - нижняя (ниже реки: y > 310)
-      if (mouseY < RIVER_BOTTOM) {
-        console.log('❌ Нельзя размещать на вражеской половине!');
-        return;
-      }
+      // Только на своей половине (ниже реки)
+      if (mouseY < RIVER_BOTTOM) return;
       
       const card = activeHand[selectedCardIndex];
-      if (elixir < card.cost) {
-        console.log('❌ Недостаточно эликсира!');
-        return;
-      }
+      if (elixir < card.cost) return;
       
       elixir -= card.cost;
       
@@ -721,37 +441,14 @@
         hp: card.hp,
         maxHp: card.hp,
         owner: 'player',
-        attackTimer: 0,
-        target: null,
-        color: card.color,
-        size: card.size
+        attackTimer: 0
       };
       
-      units.push(newUnit);
+      myUnits.push(newUnit);
       cycleHand(selectedCardIndex);
       
       send({ type: 'placeUnit', unit: newUnit, x: mouseX, y: mouseY });
     });
-
-    function updateRemoteState(msg) {
-      if (!matchActive) return;
-      
-      // Обновляем вражеские юниты
-      if (msg.units) {
-        // Оставляем только своих юнитов
-        const myUnits = units.filter(u => u.owner === 'player');
-        // Добавляем вражеские юниты (сервер присылает их с owner='enemy')
-        const enemyUnits = msg.units
-          .filter(u => u.owner === 'enemy')
-          .map(u => ({...u, attackTimer: u.attackTimer || 0}));
-        units = [...myUnits, ...enemyUnits];
-      }
-      
-      // Обновляем вражеские башни
-      if (msg.towers && msg.towers.enemy) {
-        enemyTowers = msg.towers.enemy.map(t => ({...t, w: t.w || 30, h: t.h || 30, owner: 'enemy'}));
-      }
-    }
 
     function displayEmoji(emoji, from) {
       const tower = from === playerId ? myTowers[1] : enemyTowers[1];
@@ -772,16 +469,15 @@
       };
     });
 
-    function findTarget(unit) {
-      // Определяем вражеские цели в зависимости от владельца юнита
-      const enemies = units.filter(u => u.owner !== unit.owner && u.hp > 0);
-      const targetTowers = unit.owner === 'player' ? enemyTowers : myTowers;
+    function findTarget(unit, allUnits, enemyTowersList) {
+      // Вражеские юниты
+      const enemies = allUnits.filter(u => u.owner !== unit.owner && u.hp > 0);
       
-      // Юниты с приоритетом "buildings" атакуют только башни
+      // Для юнитов с приоритетом buildings
       if (unit.targets === 'buildings') {
         let closest = null;
         let minDist = Infinity;
-        targetTowers.forEach(t => {
+        enemyTowersList.forEach(t => {
           if (t.hp <= 0) return;
           const dx = t.x + t.w/2 - unit.x;
           const dy = t.y + t.h/2 - unit.y;
@@ -791,25 +487,22 @@
         return closest;
       }
       
-      // Ищем ближайшего вражеского юнита в радиусе агро
+      // Ближайший вражеский юнит в радиусе 150
       let closestEnemy = null;
-      let minDist = 150; // Радиус агро
+      let minDist = 150;
       enemies.forEach(e => {
         const dx = e.x - unit.x;
         const dy = e.y - unit.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < minDist) {
-          minDist = dist;
-          closestEnemy = e;
-        }
+        if (dist < minDist) { minDist = dist; closestEnemy = e; }
       });
       
       if (closestEnemy) return closestEnemy;
       
-      // Если врагов рядом нет - идем к ближайшей башне
+      // Иначе ближайшая башня
       let closestTower = null;
       minDist = Infinity;
-      targetTowers.forEach(t => {
+      enemyTowersList.forEach(t => {
         if (t.hp <= 0) return;
         const dx = t.x + t.w/2 - unit.x;
         const dy = t.y + t.h/2 - unit.y;
@@ -817,6 +510,72 @@
         if (dist < minDist) { minDist = dist; closestTower = t; }
       });
       return closestTower;
+    }
+
+    function updateUnitMovement(unit, target, dt) {
+      if (!target) return;
+      
+      let targetX, targetY;
+      if (target.w !== undefined) {
+        targetX = target.x + target.w/2;
+        targetY = target.y + target.h/2;
+      } else {
+        targetX = target.x;
+        targetY = target.y;
+      }
+      
+      const dx = targetX - unit.x;
+      const dy = targetY - unit.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const attackRange = 30;
+      
+      if (dist > attackRange) {
+        let newX = unit.x + (dx/dist) * unit.speed * 60 * dt;
+        let newY = unit.y + (dy/dist) * unit.speed * 60 * dt;
+        
+        // Проверка пересечения реки
+        const crossingDown = unit.y < RIVER_TOP && newY > RIVER_BOTTOM;
+        const crossingUp = unit.y > RIVER_BOTTOM && newY < RIVER_TOP;
+        
+        if (crossingDown || crossingUp) {
+          // Пытается пересечь реку - можно только по мосту
+          if (isOnBridge(unit.x, unit.y)) {
+            // На мосту - разрешаем
+            unit.x = newX;
+            unit.y = newY;
+          } else {
+            // Идем к ближайшему мосту
+            let closestBridge = null;
+            let minBridgeDist = Infinity;
+            for (let bridge of BRIDGES) {
+              const bx = bridge.x + bridge.width/2;
+              const by = bridge.y + bridge.height/2;
+              const bdist = Math.sqrt((bx-unit.x)**2 + (by-unit.y)**2);
+              if (bdist < minBridgeDist) {
+                minBridgeDist = bdist;
+                closestBridge = {x: bx, y: by};
+              }
+            }
+            if (closestBridge) {
+              const bdx = closestBridge.x - unit.x;
+              const bdy = closestBridge.y - unit.y;
+              const bdist2 = Math.sqrt(bdx*bdx + bdy*bdy);
+              if (bdist2 > 0) {
+                unit.x += (bdx/bdist2) * unit.speed * 60 * dt;
+                unit.y += (bdy/bdist2) * unit.speed * 60 * dt;
+              }
+            }
+          }
+        } else {
+          // Не пересекает реку - нормальное движение
+          unit.x = newX;
+          unit.y = newY;
+        }
+      } else if (unit.attackTimer <= 0) {
+        // Атака
+        target.hp -= unit.dmg;
+        unit.attackTimer = unit.attackSpeed;
+      }
     }
 
     function gameLoop(ts) {
@@ -841,105 +600,45 @@
       const rate = suddenDeath ? 0.56 : 0.28;
       elixir = Math.min(maxElixir, elixir + rate * dt);
       
-      updateUnits(dt);
+      // Обновляем своих юнитов
+      myUnits.forEach(u => {
+        if (u.hp <= 0) return;
+        if (u.attackTimer > 0) u.attackTimer -= dt;
+        const target = findTarget(u, [...myUnits, ...enemyUnits], enemyTowers);
+        updateUnitMovement(u, target, dt);
+      });
+      
+      // Обновляем вражеских юнитов (движение)
+      enemyUnits.forEach(u => {
+        if (u.hp <= 0) return;
+        if (u.attackTimer > 0) u.attackTimer -= dt;
+        const target = findTarget(u, [...myUnits, ...enemyUnits], myTowers);
+        updateUnitMovement(u, target, dt);
+      });
+      
+      // Удаляем мертвых
+      myUnits = myUnits.filter(u => u.hp > 0);
+      enemyUnits = enemyUnits.filter(u => u.hp > 0);
+      myTowers = myTowers.filter(t => t.hp > 0);
+      enemyTowers = enemyTowers.filter(t => t.hp > 0);
+      
       checkTowerDestruction();
       drawCanvas();
       updateHUD();
       
-      if (matchActive) {
-        animationFrameId = requestAnimationFrame(gameLoop);
-      }
-    }
-
-    function updateUnits(dt) {
-      units.forEach(u => {
-        if (u.hp <= 0) return;
-        
-        // Уменьшаем таймер атаки
-        if (u.attackTimer > 0) u.attackTimer -= dt;
-        
-        const target = findTarget(u);
-        
-        if (target) {
-          let targetX, targetY;
-          
-          if (target.w !== undefined) {
-            // Это башня (имеет w и h)
-            targetX = target.x + target.w/2;
-            targetY = target.y + target.h/2;
-          } else {
-            // Это юнит (имеет x и y)
-            targetX = target.x;
-            targetY = target.y;
-          }
-          
-          const dx = targetX - u.x;
-          const dy = targetY - u.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          const attackRange = 30;
-          
-          if (dist > attackRange) {
-            // Движение к цели
-            let newX = u.x + (dx/dist) * u.speed * 60 * dt;
-            let newY = u.y + (dy/dist) * u.speed * 60 * dt;
-            
-            // Проверка: пытается ли юнит пересечь реку НЕ по мосту
-            const wasAboveRiver = u.y < RIVER_TOP;
-            const willBeBelowRiver = newY > RIVER_BOTTOM;
-            const wasBelowRiver = u.y > RIVER_BOTTOM;
-            const willBeAboveRiver = newY < RIVER_TOP;
-            
-            if ((wasAboveRiver && willBeBelowRiver) || (wasBelowRiver && willBeAboveRiver)) {
-              // Пытается пересечь реку - проверяем, на мосту ли он
-              if (!canCrossRiver(u.x, u.y)) {
-                // Не на мосту - ищем ближайший мост
-                let closestBridge = null;
-                let minBridgeDist = Infinity;
-                for (let bridge of BRIDGES) {
-                  const bx = bridge.x + bridge.width/2;
-                  const by = bridge.y + bridge.height/2;
-                  const bdist = Math.sqrt((bx-u.x)**2 + (by-u.y)**2);
-                  if (bdist < minBridgeDist) {
-                    minBridgeDist = bdist;
-                    closestBridge = {x: bx, y: by};
-                  }
-                }
-                if (closestBridge) {
-                  const bdx = closestBridge.x - u.x;
-                  const bdy = closestBridge.y - u.y;
-                  const bdist2 = Math.sqrt(bdx*bdx + bdy*bdy);
-                  if (bdist2 > 0) {
-                    newX = u.x + (bdx/bdist2) * u.speed * 60 * dt;
-                    newY = u.y + (bdy/bdist2) * u.speed * 60 * dt;
-                  }
-                }
-              }
-            }
-            
-            u.x = newX;
-            u.y = newY;
-          } else if (u.attackTimer <= 0) {
-            // АТАКА С ЗАДЕРЖКОЙ
-            target.hp -= u.dmg;
-            u.attackTimer = u.attackSpeed;
-            console.log(`⚔️ ${u.icon} атакует! Урон: ${u.dmg}, HP цели: ${Math.ceil(target.hp)}`);
-          }
-        }
-      });
-      
-      // Удаляем мертвых юнитов
-      units = units.filter(u => u.hp > 0);
-      // Удаляем разрушенные башни
-      myTowers = myTowers.filter(t => t.hp > 0);
-      enemyTowers = enemyTowers.filter(t => t.hp > 0);
-      
-      // Отправляем состояние на сервер
-      if (Math.random() < 0.15) {
+      // Отправляем состояние каждые 200мс
+      const now = Date.now();
+      if (now - lastStateUpdate > 200) {
+        lastStateUpdate = now;
         send({ 
           type: 'stateUpdate', 
-          units: units.filter(u => u.owner === 'player'), 
-          towers: { player: myTowers } 
+          units: myUnits,
+          towers: { player: myTowers }
         });
+      }
+      
+      if (matchActive) {
+        animationFrameId = requestAnimationFrame(gameLoop);
       }
     }
 
@@ -947,14 +646,8 @@
       const playerMain = myTowers.find(t => t.type === 'main');
       const enemyMain = enemyTowers.find(t => t.type === 'main');
       
-      if (enemyMain && enemyMain.hp <= 0) {
-        console.log('🏆 Главная башня врага уничтожена!');
-        endBattle('win');
-      }
-      if (playerMain && playerMain.hp <= 0) {
-        console.log('💔 Наша главная башня уничтожена!');
-        endBattle('lose');
-      }
+      if (enemyMain && enemyMain.hp <= 0) endBattle('win');
+      if (playerMain && playerMain.hp <= 0) endBattle('lose');
     }
 
     function checkMainTowersIntact() {
@@ -974,7 +667,7 @@
       else endBattle('draw');
     }
 
-    function endBattle(result, winnerId) {
+    function endBattle(result) {
       if (!matchActive) return;
       matchActive = false;
       
@@ -1000,30 +693,17 @@
     function drawCanvas() {
       ctx.clearRect(0, 0, 400, 550);
       
-      // Трава (верхняя половина - враг, нижняя - игрок)
-      ctx.fillStyle = '#4a3a3a'; // Красноватая трава для врага
-      ctx.fillRect(0, 0, 400, 245);
+      // Верхняя половина (враг)
+      ctx.fillStyle = '#4a3a3a';
+      ctx.fillRect(0, 0, 400, RIVER_TOP);
       
-      ctx.fillStyle = '#3a5a3a'; // Зеленая трава для игрока
-      ctx.fillRect(0, 305, 400, 245);
+      // Нижняя половина (игрок)
+      ctx.fillStyle = '#3a5a3a';
+      ctx.fillRect(0, RIVER_BOTTOM, 400, 550 - RIVER_BOTTOM);
       
       // Река
       ctx.fillStyle = '#2f6f8f';
-      ctx.fillRect(0, 245, 400, 60);
-      
-      // Волны на реке
-      ctx.strokeStyle = '#5a9fbf';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 400; i += 30) {
-        ctx.beginPath();
-        ctx.moveTo(i, 255);
-        ctx.quadraticCurveTo(i+15, 260, i+30, 255);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(i, 285);
-        ctx.quadraticCurveTo(i+15, 290, i+30, 285);
-        ctx.stroke();
-      }
+      ctx.fillRect(0, RIVER_TOP, 400, 60);
       
       // Мосты
       BRIDGES.forEach(bridge => {
@@ -1032,111 +712,74 @@
         ctx.strokeStyle = '#5c4a1e';
         ctx.lineWidth = 2;
         ctx.strokeRect(bridge.x, bridge.y, bridge.width, bridge.height);
-        // Доски моста
-        for (let i = 0; i < bridge.height; i += 8) {
-          ctx.beginPath();
-          ctx.moveTo(bridge.x, bridge.y + i);
-          ctx.lineTo(bridge.x + bridge.width, bridge.y + i);
-          ctx.stroke();
-        }
       });
       
-      // Рисуем башни врага (сверху)
+      // Башни врага
       enemyTowers.forEach(t => {
         if (t.hp <= 0) return;
-        
         ctx.fillStyle = '#c94b4b';
         ctx.fillRect(t.x, t.y, t.w, t.h);
-        
-        // Зубцы для главной башни
         if (t.type === 'main') {
           ctx.fillStyle = '#d95b5b';
-          for (let i = 0; i < 5; i++) {
-            ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
-          }
+          for (let i = 0; i < 5; i++) ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
         }
-        
-        // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(t.x - 2, t.y + t.h + 4, t.w + 4, 6);
         ctx.fillStyle = '#e74c3c';
-        const hpPercent = t.hp / t.maxHp;
-        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * hpPercent, 6);
-        
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * (t.hp/t.maxHp), 6);
         ctx.fillStyle = 'white';
         ctx.font = 'bold 9px sans-serif';
         ctx.fillText(Math.ceil(t.hp), t.x + t.w/2 - 10, t.y + t.h + 14);
-        
         if (t.emoji) {
           ctx.font = '22px sans-serif';
           ctx.fillText(t.emoji.symbol, t.x + t.w/2 - 11, t.y - 10);
-          t.emoji.timer -= 0.016;
+          t.emoji.timer = (t.emoji.timer || 0) - 0.016;
           if (t.emoji.timer <= 0) t.emoji = null;
         }
       });
       
-      // Рисуем башни игрока (снизу)
+      // Башни игрока
       myTowers.forEach(t => {
         if (t.hp <= 0) return;
-        
         ctx.fillStyle = '#4a7db0';
         ctx.fillRect(t.x, t.y, t.w, t.h);
-        
         if (t.type === 'main') {
           ctx.fillStyle = '#5a8dc0';
-          for (let i = 0; i < 5; i++) {
-            ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
-          }
+          for (let i = 0; i < 5; i++) ctx.fillRect(t.x + i*9, t.y - 6, 7, 6);
         }
-        
-        // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(t.x - 2, t.y + t.h + 4, t.w + 4, 6);
         ctx.fillStyle = '#2ecc71';
-        const hpPercent = t.hp / t.maxHp;
-        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * hpPercent, 6);
-        
+        ctx.fillRect(t.x - 2, t.y + t.h + 4, (t.w + 4) * (t.hp/t.maxHp), 6);
         ctx.fillStyle = 'white';
         ctx.font = 'bold 9px sans-serif';
         ctx.fillText(Math.ceil(t.hp), t.x + t.w/2 - 10, t.y + t.h + 14);
-        
         if (t.emoji) {
           ctx.font = '22px sans-serif';
           ctx.fillText(t.emoji.symbol, t.x + t.w/2 - 11, t.y - 10);
-          t.emoji.timer -= 0.016;
+          t.emoji.timer = (t.emoji.timer || 0) - 0.016;
           if (t.emoji.timer <= 0) t.emoji = null;
         }
       });
       
-      // Рисуем юнитов
-      units.forEach(u => {
+      // Все юниты
+      [...myUnits, ...enemyUnits].forEach(u => {
         if (u.hp <= 0) return;
-        
-        // Тень
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath();
         ctx.arc(u.x + 2, u.y + 2, u.size, 0, 2 * Math.PI);
         ctx.fill();
-        
-        // Шарик
         ctx.fillStyle = u.owner === 'player' ? '#7cb0e8' : '#e87c7c';
         ctx.beginPath();
         ctx.arc(u.x, u.y, u.size, 0, 2 * Math.PI);
         ctx.fill();
-        
-        // Обводка
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.lineWidth = 2;
         ctx.stroke();
-        
-        // HP bar
         ctx.fillStyle = '#333';
         ctx.fillRect(u.x - u.size, u.y - u.size - 10, u.size * 2, 4);
         ctx.fillStyle = u.owner === 'player' ? '#3498db' : '#e74c3c';
-        const hpPercent = u.hp / u.maxHp;
-        ctx.fillRect(u.x - u.size, u.y - u.size - 10, u.size * 2 * hpPercent, 4);
-        
-        // Иконка
+        ctx.fillRect(u.x - u.size, u.y - u.size - 10, u.size * 2 * (u.hp/u.maxHp), 4);
         ctx.fillStyle = 'white';
         ctx.font = `${u.size}px sans-serif`;
         ctx.fillText(u.icon, u.x - u.size/2, u.y + u.size/3);
@@ -1146,8 +789,7 @@
     function updateHUD() {
       const minutes = Math.floor(gameTime / 60);
       const seconds = Math.floor(gameTime % 60);
-      document.getElementById('timerDisplay').textContent = 
-        `${minutes}:${String(seconds).padStart(2, '0')}`;
+      document.getElementById('timerDisplay').textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
       document.getElementById('elixirValue').textContent = elixir.toFixed(1);
       document.getElementById('elixirFill').style.width = (elixir / maxElixir * 100) + '%';
     }
@@ -1159,7 +801,6 @@
       stopSearching();
     };
 
-    // Инициализация
     loadProfile();
     initDeck();
     connectWebSocket();
